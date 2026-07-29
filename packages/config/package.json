@@ -1,0 +1,12 @@
+{
+  "name": "@tnf/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./typescript/base": "./typescript/base.json",
+    "./eslint": "./eslint/base.cjs",
+    "./prettier": "./prettier/base.cjs",
+    "./env": "./env/index.ts"
+  }
+}
