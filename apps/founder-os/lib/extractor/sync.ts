@@ -7,56 +7,115 @@ import {
   saveMemory,
 } from "@/lib/memory/store";
 
-function normalizeText(
-  value: string,
-): string {
-  return value
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
 function mergeDescriptions(
   current: string,
   incoming: string,
 ): string {
-  const splitIntoSentences = (
-    value: string,
-  ): string[] =>
-    normalizeText(value)
-      .split(/[.!?]+/)
-      .map((part) => normalizeText(part))
+  const normalizedCurrent =
+    current
+      .trim()
+      .replace(/\s+/g, " ");
+
+  const normalizedIncoming =
+    incoming
+      .trim()
+      .replace(/\s+/g, " ");
+
+  if (!normalizedCurrent) {
+    return normalizedIncoming;
+  }
+
+  if (!normalizedIncoming) {
+    return normalizedCurrent;
+  }
+
+  const lowerCurrent =
+    normalizedCurrent.toLowerCase();
+
+  const lowerIncoming =
+    normalizedIncoming.toLowerCase();
+
+  if (
+    lowerCurrent === lowerIncoming ||
+    lowerCurrent.includes(lowerIncoming)
+  ) {
+    return normalizedCurrent;
+  }
+
+  for (
+    const currentPart
+    of normalizedCurrent.match(
+      /[^.!?]+[.!?]?/g,
+    ) ?? [normalizedCurrent]
+  ) {
+    const normalizedPart =
+      currentPart
+        .trim()
+        .toLowerCase()
+        .replace(/[.!?]+$/, "");
+
+    if (
+      normalizedPart &&
+      lowerIncoming === normalizedPart
+    ) {
+      return normalizedCurrent;
+    }
+  }
+
+  if (
+    lowerIncoming.includes(lowerCurrent)
+  ) {
+    return normalizedIncoming;
+  }
+
+  const merged =
+    (
+      normalizedCurrent.match(
+        /[^.!?]+[.!?]?/g,
+      ) ?? [normalizedCurrent]
+    )
+      .map((part) => part.trim())
       .filter(Boolean);
 
-  const existingParts =
-    splitIntoSentences(current);
-
   const incomingParts =
-    splitIntoSentences(incoming);
-
-  const merged = [
-    ...existingParts,
-  ];
+    (
+      normalizedIncoming.match(
+        /[^.!?]+[.!?]?/g,
+      ) ?? [normalizedIncoming]
+    )
+      .map((part) => part.trim())
+      .filter(Boolean);
 
   for (
     const incomingPart
     of incomingParts
   ) {
-    const normalizedIncoming =
-      incomingPart.toLowerCase();
+    const normalizedIncomingPart =
+      incomingPart
+        .toLowerCase()
+        .replace(/[.!?]+$/, "");
 
     const alreadyExists =
       merged.some((existingPart) => {
         const normalizedExisting =
-          existingPart.toLowerCase();
+          existingPart
+            .toLowerCase()
+            .replace(/[.!?]+$/, "");
 
         return (
           normalizedExisting ===
-            normalizedIncoming ||
-          normalizedExisting.includes(
-            normalizedIncoming,
+            normalizedIncomingPart ||
+          (
+            normalizedIncomingPart.length > 8 &&
+            normalizedExisting.includes(
+              normalizedIncomingPart,
+            )
           ) ||
-          normalizedIncoming.includes(
-            normalizedExisting,
+          (
+            normalizedExisting.length > 8 &&
+            normalizedIncomingPart.includes(
+              normalizedExisting,
+            )
           )
         );
       });
@@ -66,49 +125,21 @@ function mergeDescriptions(
     }
   }
 
-  return merged.join(". ");
-}
+  return merged.reduce(
+    (description, part) => {
+      if (!description) {
+        return part;
+      }
 
-function assignNonEmpty(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-) {
-  for (
-    const [key, value]
-    of Object.entries(source)
-  ) {
-    if (
-      typeof value !== "string"
-    ) {
-      continue;
-    }
+      const separator =
+        /[.!?]$/.test(description)
+          ? " "
+          : ". ";
 
-    const normalized =
-      normalizeText(value);
-
-    if (!normalized) {
-      continue;
-    }
-
-    if (
-      key === "description"
-    ) {
-      const current =
-        typeof target[key] === "string"
-          ? target[key]
-          : "";
-
-      target[key] =
-        mergeDescriptions(
-          current,
-          normalized,
-        );
-
-      continue;
-    }
-
-    target[key] = normalized;
-  }
+      return `${description}${separator}${part}`;
+    },
+    "",
+  );
 }
 
 export async function syncMemory(
@@ -117,27 +148,60 @@ export async function syncMemory(
   const memory =
     await loadMemory();
 
-  assignNonEmpty(
-    memory.company as Record<
-      string,
-      unknown
-    >,
-    extracted.company as Record<
-      string,
-      unknown
-    >,
-  );
+  const profileSections: Array<
+    [
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ]
+  > = [
+    [
+      memory.company as Record<
+        string,
+        unknown
+      >,
+      extracted.company as Record<
+        string,
+        unknown
+      >,
+    ],
+    [
+      memory.founder as Record<
+        string,
+        unknown
+      >,
+      extracted.founder as Record<
+        string,
+        unknown
+      >,
+    ],
+  ];
 
-  assignNonEmpty(
-    memory.founder as Record<
-      string,
-      unknown
-    >,
-    extracted.founder as Record<
-      string,
-      unknown
-    >,
-  );
+  for (
+    const [target, source]
+    of profileSections
+  ) {
+    for (
+      const [key, value]
+      of Object.entries(source)
+    ) {
+      if (
+        typeof value !== "string"
+      ) {
+        continue;
+      }
+
+      const normalized =
+        value
+          .trim()
+          .replace(/\s+/g, " ");
+
+      if (!normalized) {
+        continue;
+      }
+
+      target[key] = normalized;
+    }
+  }
 
   if (
     extracted.clearProductName
@@ -154,16 +218,59 @@ export async function syncMemory(
     );
   }
 
-  assignNonEmpty(
+  const product =
     memory.product as Record<
       string,
       unknown
-    >,
-    extracted.product as Record<
-      string,
-      unknown
-    >,
-  );
+    >;
+
+  for (
+    const [key, value]
+    of Object.entries(
+      extracted.product as Record<
+        string,
+        unknown
+      >,
+    )
+  ) {
+    if (
+      typeof value !== "string"
+    ) {
+      continue;
+    }
+
+    const normalized =
+      value
+        .trim()
+        .replace(/\s+/g, " ");
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (
+      key === "name" &&
+      extracted.clearProductName
+    ) {
+      continue;
+    }
+
+    if (
+      key === "description"
+    ) {
+      product[key] =
+        mergeDescriptions(
+          typeof product[key] === "string"
+            ? product[key]
+            : "",
+          normalized,
+        );
+
+      continue;
+    }
+
+    product[key] = normalized;
+  }
 
   await saveMemory(memory);
 

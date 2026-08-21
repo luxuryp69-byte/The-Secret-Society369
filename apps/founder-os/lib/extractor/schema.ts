@@ -1,0 +1,59 @@
+import { z } from "zod";
+
+const OptionalString = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? "");
+
+const CompanySchema = z.object({
+  name: OptionalString,
+  industry: OptionalString,
+  stage: OptionalString,
+});
+
+const FounderSchema = z.object({
+  name: OptionalString,
+  role: OptionalString,
+});
+
+const ProductSchema = z.object({
+  name: OptionalString,
+  description: OptionalString,
+});
+
+export const ActionSchema = z.object({
+  tool: z.string(),
+  input: z
+    .record(z.string(), z.any())
+    .default({}),
+});
+
+export const ExtractedMemorySchema = z.object({
+  company: CompanySchema.default({
+    name: "",
+    industry: "",
+    stage: "",
+  }),
+
+  founder: FounderSchema.default({
+    name: "",
+    role: "",
+  }),
+
+  product: ProductSchema.default({
+    name: "",
+    description: "",
+  }),
+
+  actions: z
+    .array(ActionSchema)
+    .default([]),
+
+  clearProductName: z
+    .boolean()
+    .default(false),
+});
+
+export type ExtractedMemory =
+  z.infer<typeof ExtractedMemorySchema>;

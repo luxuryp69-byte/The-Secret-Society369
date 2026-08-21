@@ -1,0 +1,437 @@
+import type { ExtractedMemory } from "./schema";
+
+const COMPANY_NAME_PATTERNS = [
+  /\bthe company\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:is|was)\b/i,
+  /\bcompany\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:is|was)\b/i,
+  /\b(?:la empresa|empresa)\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:es|está)\b/i,
+];
+
+const COMPANY_STAGE_PATTERNS: Array<{
+  pattern: RegExp;
+  stage: string;
+}> = [
+  {
+    pattern: /\bcurrently at the idea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bidea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bat the idea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bpre[- ]seed\b/i,
+    stage: "pre-seed",
+  },
+  {
+    pattern: /\bseed stage\b/i,
+    stage: "seed",
+  },
+  {
+    pattern: /\bseries a\b/i,
+    stage: "series-a",
+  },
+  {
+    pattern: /\bmvp stage\b/i,
+    stage: "mvp",
+  },
+  {
+    pattern: /\bvalidation stage\b/i,
+    stage: "validation",
+  },
+  {
+    pattern: /\betapa de idea\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\betapa de validación\b/i,
+    stage: "validation",
+  },
+  {
+    pattern: /\betapa de mvp\b/i,
+    stage: "mvp",
+  },
+];
+
+const BUILDING_PATTERNS = [
+  /\bi am building\s+(.+?)(?:[.!?]|$)/i,
+  /\bi'm building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe are building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe're building\s+(.+?)(?:[.!?]|$)/i,
+  /\bmy product is\s+(.+?)(?:[.!?]|$)/i,
+  /\bour product is\s+(.+?)(?:[.!?]|$)/i,
+  /\bthe company\s+[A-Za-z0-9][A-Za-z0-9 .&_-]*?\s+is building\s+(.+?)(?:[.!?]|$)/i,
+  /\bcompany\s+[A-Za-z0-9][A-Za-z0-9 .&_-]*?\s+is building\s+(.+?)(?:[.!?]|$)/i,
+  /\bestamos construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestamos creando\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy creando\s+(.+?)(?:[.!?]|$)/i,
+];
+
+const PRODUCT_HELP_PATTERNS = [
+  /\bour product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+  /\bthe product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+  /\bmy product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+  /\bnuestro producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+  /\bel producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+  /\bmi producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+];
+
+const DESCRIPTIVE_PRODUCT_WORDS = [
+  "platform",
+  "plataforma",
+  "system",
+  "sistema",
+  "tool",
+  "herramienta",
+  "software",
+  "application",
+  "app",
+  "operating system",
+  "management system",
+];
+
+const DESCRIPTIVE_PRODUCT_VERBS = [
+  "helps",
+  "help",
+  "manages",
+  "manage",
+  "allows",
+  "allow",
+  "enables",
+  "enable",
+  "provides",
+  "provide",
+  "automates",
+  "automate",
+  "organizes",
+  "organize",
+  "runs",
+  "run",
+  "builds",
+  "build",
+];
+
+function cleanDescription(
+  value: string,
+): string {
+  return value
+    .trim()
+    .replace(
+      /^(a|an|the|una|un|el|la)\s+/i,
+      "",
+    )
+    .replace(/\s+/g, " ");
+}
+
+function extractCompanyName(
+  message: string,
+): string {
+  for (
+    const pattern of COMPANY_NAME_PATTERNS
+  ) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const name = match[1]
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (name) {
+      return name;
+    }
+  }
+
+  return "";
+}
+
+function extractCompanyStage(
+  message: string,
+): string {
+  for (
+    const {
+      pattern,
+      stage,
+    } of COMPANY_STAGE_PATTERNS
+  ) {
+    if (pattern.test(message)) {
+      return stage;
+    }
+  }
+
+  return "";
+}
+
+function extractBuiltProductDescription(
+  message: string,
+): string {
+  for (
+    const pattern of BUILDING_PATTERNS
+  ) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const description =
+      cleanDescription(match[1]);
+
+    if (description) {
+      return description;
+    }
+  }
+
+  return "";
+}
+
+function extractProductHelpDescription(
+  message: string,
+): string {
+  for (
+    const pattern of PRODUCT_HELP_PATTERNS
+  ) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const help = match[1]
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (help) {
+      return `helps ${help}`;
+    }
+  }
+
+  return "";
+}
+
+function combineDescriptions(
+  ...values: string[]
+): string {
+  const unique = values
+    .map(
+      (value) =>
+        value
+          .trim()
+          .replace(/\s+/g, " "),
+    )
+    .filter(Boolean)
+    .filter(
+      (
+        value,
+        index,
+        array,
+      ) =>
+        !array
+          .slice(0, index)
+          .some(
+            (existing) =>
+              existing.toLowerCase() ===
+              value.toLowerCase(),
+          ),
+    );
+
+  return unique.join(". ");
+}
+
+function looksLikeProductDescription(
+  value: string,
+): boolean {
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  if (!normalized) {
+    return false;
+  }
+
+  const words =
+    normalized
+      .split(/\s+/)
+      .filter(Boolean);
+
+  if (
+    words.length >= 6
+  ) {
+    return true;
+  }
+
+  if (
+    DESCRIPTIVE_PRODUCT_VERBS.some(
+      (verb) =>
+        new RegExp(
+          `\\b${verb}\\b`,
+          "i",
+        ).test(normalized),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    words.length >= 3 &&
+    DESCRIPTIVE_PRODUCT_WORDS.some(
+      (word) =>
+        normalized.includes(word),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /^(a|an|the|una|un|el|la)\b/i.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(for|para|that|que)\b/i.test(
+      normalized,
+    ) &&
+    words.length >= 3
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function normalizeExtractedMemory(
+  message: string,
+  extracted: ExtractedMemory,
+): ExtractedMemory {
+  const normalized: ExtractedMemory = {
+    ...extracted,
+
+    company: {
+      ...extracted.company,
+    },
+
+    founder: {
+      ...extracted.founder,
+    },
+
+    product: {
+      ...extracted.product,
+    },
+
+    actions: [
+      ...extracted.actions,
+    ],
+
+    clearProductName:
+      extracted.clearProductName ?? false,
+  };
+
+  const companyName =
+    extractCompanyName(message);
+
+  if (companyName) {
+    normalized.company.name =
+      companyName;
+  }
+
+  const companyStage =
+    extractCompanyStage(message);
+
+  if (companyStage) {
+    normalized.company.stage =
+      companyStage;
+  }
+
+  const builtDescription =
+    extractBuiltProductDescription(
+      message,
+    );
+
+  const helpDescription =
+    extractProductHelpDescription(
+      message,
+    );
+
+  const deterministicDescription =
+    combineDescriptions(
+      builtDescription,
+      helpDescription,
+    );
+
+  if (
+    deterministicDescription
+  ) {
+    normalized.product.description =
+      combineDescriptions(
+        deterministicDescription,
+        normalized.product.description ?? "",
+      );
+  }
+
+  const extractedProductName =
+    normalized.product.name
+      ?.trim()
+      .toLowerCase() ?? "";
+
+  const productDescription =
+    normalized.product.description
+      ?.trim()
+      .toLowerCase() ?? "";
+
+  const builtDescriptionLower =
+    builtDescription
+      .trim()
+      .toLowerCase();
+
+  const shouldClearProductName =
+    Boolean(extractedProductName) &&
+    (
+      (
+        Boolean(productDescription) &&
+        (
+          extractedProductName ===
+            productDescription ||
+          productDescription.includes(
+            extractedProductName,
+          )
+        )
+      ) ||
+      (
+        Boolean(builtDescriptionLower) &&
+        (
+          extractedProductName ===
+            builtDescriptionLower ||
+          (
+            looksLikeProductDescription(
+              normalized.product.name ?? "",
+            ) &&
+            builtDescriptionLower.includes(
+              extractedProductName,
+            )
+          )
+        )
+      ) ||
+      looksLikeProductDescription(
+        normalized.product.name ?? "",
+      )
+    );
+
+  if (
+    shouldClearProductName
+  ) {
+    normalized.product.name = "";
+    normalized.clearProductName = true;
+  }
+
+  return normalized;
+}

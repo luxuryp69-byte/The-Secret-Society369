@@ -1,0 +1,422 @@
+import type { ExtractedMemory } from "./schema";
+
+const COMPANY_NAME_PATTERNS = [
+  /\bthe company\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:is|was)\b/i,
+  /\bcompany\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:is|was)\b/i,
+  /\b(?:la empresa|empresa)\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+(?:es|está)\b/i,
+];
+
+const COMPANY_STAGE_PATTERNS: Array<{
+  pattern: RegExp;
+  stage: string;
+}> = [
+  {
+    pattern: /\bidea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bcurrently at the idea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bat the idea stage\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\bpre[- ]seed\b/i,
+    stage: "pre-seed",
+  },
+  {
+    pattern: /\bseed stage\b/i,
+    stage: "seed",
+  },
+  {
+    pattern: /\bseries a\b/i,
+    stage: "series-a",
+  },
+  {
+    pattern: /\bmvp stage\b/i,
+    stage: "mvp",
+  },
+  {
+    pattern: /\bvalidation stage\b/i,
+    stage: "validation",
+  },
+  {
+    pattern: /\betapa de idea\b/i,
+    stage: "idea",
+  },
+  {
+    pattern: /\betapa de validación\b/i,
+    stage: "validation",
+  },
+  {
+    pattern: /\betapa de mvp\b/i,
+    stage: "mvp",
+  },
+];
+
+const BUILDING_PATTERNS = [
+  /\bi am building\s+(.+?)(?:[.!?]|$)/i,
+  /\bi'm building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe are building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe're building\s+(.+?)(?:[.!?]|$)/i,
+  /\bmy product is\s+(.+?)(?:[.!?]|$)/i,
+  /\bour product is\s+(.+?)(?:[.!?]|$)/i,
+
+  /\bthe company\s+[A-Za-z0-9][A-Za-z0-9 .&_-]*?\s+is building\s+(.+?)(?:[.!?]|$)/i,
+  /\bcompany\s+[A-Za-z0-9][A-Za-z0-9 .&_-]*?\s+is building\s+(.+?)(?:[.!?]|$)/i,
+
+  /\bestamos construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestamos creando\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy creando\s+(.+?)(?:[.!?]|$)/i,
+];
+
+const PRODUCT_HELP_PATTERNS = [
+  /\bour product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+  /\bthe product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+  /\bmy product\s+helps\s+(.+?)(?:[.!?]|$)/i,
+
+  /\bnuestro producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+  /\bel producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+  /\bmi producto\s+ayuda\s+a\s+(.+?)(?:[.!?]|$)/i,
+];
+
+function cleanDescription(value: string): string {
+  return value
+    .trim()
+    .replace(/^(a|an|the|una|un|el|la)\s+/i, "")
+    .replace(/\s+/g, " ");
+}
+
+function extractCompanyName(
+  message: string,
+): string {
+  for (const pattern of COMPANY_NAME_PATTERNS) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const name = match[1]
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (name) {
+      return name;
+    }
+  }
+
+  return "";
+}
+
+function extractCompanyStage(
+  message: string,
+): string {
+  for (const { pattern, stage } of COMPANY_STAGE_PATTERNS) {
+    if (pattern.test(message)) {
+      return stage;
+    }
+  }
+
+  return "";
+}
+
+function extractBuiltProductDescription(
+  message: string,
+): string {
+  for (const pattern of BUILDING_PATTERNS) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const description = cleanDescription(match[1]);
+
+    if (description) {
+      return description;
+    }
+  }
+
+  return "";
+}
+
+function extractProductHelpDescription(
+  message: string,
+): string {
+  for (const pattern of PRODUCT_HELP_PATTERNS) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const help = match[1]
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (help) {
+      return `helps ${help}`;
+    }
+  }
+
+  return "";
+}
+
+function combineDescriptions(
+  ...values: string[]
+): string {
+  const unique = values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter(
+      (value, index, array) =>
+        !array
+          .slice(0, index)
+          .some(
+            (existing) =>
+              existing.toLowerCase() ===
+              value.toLowerCase(),
+          ),
+    );
+
+  return unique.join(". ");
+}
+
+function normalizeText(
+  value: string,
+): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function looksLikeProductDescription(
+  value: string,
+): boolean {
+  const normalized =
+    normalizeText(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  const lower =
+    normalized.toLowerCase();
+
+  const wordCount =
+    normalized
+      .split(/\s+/)
+      .filter(Boolean)
+      .length;
+
+  const descriptivePatterns = [
+    /\bhelps?\b/i,
+    /\bfor\b/i,
+    /\bthat\b/i,
+    /\bwhich\b/i,
+    /\bto\b/i,
+    /\bplatform\b/i,
+    /\bsystem\b/i,
+    /\btool\b/i,
+    /\bsoftware\b/i,
+    /\bapp\b/i,
+    /\boperating system\b/i,
+    /\bmanagement\b/i,
+    /\bautomation\b/i,
+    /\bsolution\b/i,
+    /\bused to\b/i,
+    /\ballows?\b/i,
+    /\benables?\b/i,
+  ];
+
+  const hasDescriptiveLanguage =
+    descriptivePatterns.some(
+      (pattern) => pattern.test(lower),
+    );
+
+if (
+  hasDescriptiveLanguage &&
+  wordCount >= 2
+) {
+  return true;
+}
+  if (wordCount >= 8) {
+    return true;
+  }
+
+  return false;
+}
+
+function moveProductNameToDescription(
+  product: {
+    name: string;
+    description: string;
+  },
+): {
+  name: string;
+  description: string;
+  moved: boolean;
+} {
+  const name =
+    normalizeText(product.name);
+
+  const description =
+    normalizeText(product.description);
+
+  if (!name) {
+    return {
+      name: "",
+      description,
+      moved: false,
+    };
+  }
+
+  if (
+    !looksLikeProductDescription(name)
+  ) {
+    return {
+      name,
+      description,
+      moved: false,
+    };
+  }
+
+  return {
+    name: "",
+    description:
+      combineDescriptions(
+        name,
+        description,
+      ),
+    moved: true,
+  };
+}
+
+export function normalizeExtractedMemory(
+  message: string,
+  extracted: ExtractedMemory,
+): ExtractedMemory {
+  const normalized: ExtractedMemory = {
+    ...extracted,
+
+    company: {
+      ...extracted.company,
+    },
+
+    founder: {
+      ...extracted.founder,
+    },
+
+    product: {
+      ...extracted.product,
+    },
+
+    actions: [
+      ...extracted.actions,
+    ],
+
+    clearProductName:
+      extracted.clearProductName ?? false,
+  };
+
+  const companyName =
+    extractCompanyName(message);
+
+  if (companyName) {
+    normalized.company.name =
+      companyName;
+  }
+
+  const companyStage =
+    extractCompanyStage(message);
+
+  if (companyStage) {
+    normalized.company.stage =
+      companyStage;
+  }
+
+  const builtDescription =
+    extractBuiltProductDescription(message);
+
+  const helpDescription =
+    extractProductHelpDescription(message);
+
+  const deterministicDescription =
+    combineDescriptions(
+      builtDescription,
+      helpDescription,
+    );
+
+  if (deterministicDescription) {
+    normalized.product.description =
+      combineDescriptions(
+        deterministicDescription,
+        normalized.product.description ?? "",
+      );
+  }
+
+  const extractedProductName =
+    normalized.product.name
+      ?.trim()
+      .toLowerCase() ?? "";
+
+  const productDescription =
+    normalized.product.description
+      ?.trim()
+      .toLowerCase() ?? "";
+
+  if (
+const extractedProductName =
+  normalizeText(
+    normalized.product.name ?? "",
+  );
+
+const productDescription =
+  normalizeText(
+    normalized.product.description ?? "",
+  );
+
+const productNameCorrection =
+  moveProductNameToDescription({
+    name: extractedProductName,
+    description: productDescription,
+  });
+
+normalized.product.name =
+  productNameCorrection.name;
+
+normalized.product.description =
+  productNameCorrection.description;
+
+if (productNameCorrection.moved) {
+  normalized.clearProductName = true;
+}
+
+const normalizedProductName =
+  normalized.product.name
+    .trim()
+    .toLowerCase();
+
+const normalizedProductDescription =
+  normalized.product.description
+    .trim()
+    .toLowerCase();
+
+if (
+  normalizedProductName &&
+  normalizedProductDescription &&
+  (
+    normalizedProductName ===
+      normalizedProductDescription ||
+    normalizedProductDescription.includes(
+      normalizedProductName,
+    )
+  )
+) {
+  normalized.product.name = "";
+  normalized.clearProductName = true;
+}

@@ -1,0 +1,166 @@
+import type { ExtractedMemory } from "./schema";
+
+const BUILDING_PATTERNS = [
+  /\bi am building\s+(.+?)(?:[.!?]|$)/i,
+  /\bi'm building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe are building\s+(.+?)(?:[.!?]|$)/i,
+  /\bwe're building\s+(.+?)(?:[.!?]|$)/i,
+  /\bmy product is\s+(.+?)(?:[.!?]|$)/i,
+  /\bour product is\s+(.+?)(?:[.!?]|$)/i,
+  /\bestamos construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestamos creando\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bestoy creando\s+(.+?)(?:[.!?]|$)/i,
+];
+
+const COMPANY_PATTERNS = [
+  /\bmy company is\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)(?:[.!?,]|$)/i,
+  /\bthe company\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+is\b/i,
+  /\bcompany\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+is\b/i,
+  /\bmi empresa es\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)(?:[.!?,]|$)/i,
+  /\bla empresa\s+([A-Za-z0-9][A-Za-z0-9 .&_-]*?)\s+es\b/i,
+];
+
+const STAGE_PATTERNS = [
+  /\bcurrently at the\s+(.+?)\s+stage\b/i,
+  /\bcurrently in the\s+(.+?)\s+stage\b/i,
+  /\bat the\s+(.+?)\s+stage\b/i,
+  /\bestá actualmente en etapa de\s+(.+?)(?:[.!?,]|$)/i,
+  /\bestamos en etapa de\s+(.+?)(?:[.!?,]|$)/i,
+];
+
+function cleanValue(value: string): string {
+  return value
+    .trim()
+    .replace(/^(a|an|the|una|un|el|la)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractFirst(
+  message: string,
+  patterns: RegExp[],
+): string {
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const value = cleanValue(match[1]);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function extractBuiltProductDescription(
+  message: string,
+): string {
+  return extractFirst(
+    message,
+    BUILDING_PATTERNS,
+  );
+}
+
+function extractCompanyName(
+  message: string,
+): string {
+  return extractFirst(
+    message,
+    COMPANY_PATTERNS,
+  );
+}
+
+function extractCompanyStage(
+  message: string,
+): string {
+  const value = extractFirst(
+    message,
+    STAGE_PATTERNS,
+  );
+
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .replace(/\bstage$/i, "")
+    .trim();
+}
+
+export function normalizeExtractedMemory(
+  message: string,
+  extracted: ExtractedMemory,
+): ExtractedMemory {
+  const normalized: ExtractedMemory = {
+    ...extracted,
+
+    company: {
+      ...extracted.company,
+    },
+
+    founder: {
+      ...extracted.founder,
+    },
+
+    product: {
+      ...extracted.product,
+    },
+
+    actions: [
+      ...extracted.actions,
+    ],
+
+    clearProductName:
+      extracted.clearProductName ?? false,
+  };
+
+  const companyName =
+    extractCompanyName(message);
+
+  if (companyName) {
+    normalized.company.name =
+      companyName;
+  }
+
+  const companyStage =
+    extractCompanyStage(message);
+
+  if (companyStage) {
+    normalized.company.stage =
+      companyStage;
+  }
+
+  const builtDescription =
+    extractBuiltProductDescription(message);
+
+  if (builtDescription) {
+    normalized.product.description =
+      builtDescription;
+
+    const extractedProductName =
+      normalized.product.name
+        ?.trim()
+        .toLowerCase() ?? "";
+
+    const description =
+      builtDescription
+        .trim()
+        .toLowerCase();
+
+    if (
+      extractedProductName &&
+      extractedProductName === description
+    ) {
+      normalized.product.name = "";
+      normalized.clearProductName = true;
+    }
+  }
+
+  return normalized;
+}

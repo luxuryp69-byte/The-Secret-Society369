@@ -1,0 +1,61 @@
+import type { ExtractedMemory } from "./schema";
+
+const BUILDING_PATTERNS = [
+  /\bI am building\s+(.+?)(?:[.!?]|$)/i,
+  /\bI'm building\s+(.+?)(?:[.!?]|$)/i,
+  /\bWe are building\s+(.+?)(?:[.!?]|$)/i,
+  /\bWe're building\s+(.+?)(?:[.!?]|$)/i,
+  /\bEstoy construyendo\s+(.+?)(?:[.!?]|$)/i,
+  /\bEstamos construyendo\s+(.+?)(?:[.!?]|$)/i,
+];
+
+function extractBuiltProductDescription(message: string): string {
+  for (const pattern of BUILDING_PATTERNS) {
+    const match = message.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const description = match[1]
+      .trim()
+      .replace(/^(a|an|una|un)\s+/i, "");
+
+    if (description) {
+      return description;
+    }
+  }
+
+  return "";
+}
+
+export function normalizeExtractedMemory(
+  message: string,
+  extracted: ExtractedMemory,
+): ExtractedMemory {
+  const normalized: ExtractedMemory = {
+    ...extracted,
+    company: { ...extracted.company },
+    founder: { ...extracted.founder },
+    product: { ...extracted.product },
+    actions: [...extracted.actions],
+  };
+
+  const builtDescription =
+    extractBuiltProductDescription(message);
+
+  if (builtDescription) {
+    normalized.product.description = builtDescription;
+
+    // "I am building X" describes what is being built.
+    // It does NOT establish X as the product's official name.
+    if (
+      normalized.product.name?.trim().toLowerCase() ===
+      builtDescription.trim().toLowerCase()
+    ) {
+      normalized.product.name = "";
+    }
+  }
+
+  return normalized;
+}

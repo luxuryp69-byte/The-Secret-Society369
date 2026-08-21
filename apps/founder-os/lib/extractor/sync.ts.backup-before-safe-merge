@@ -1,0 +1,38 @@
+import type {
+  ExtractedMemory,
+} from "./schema";
+
+import {
+  loadMemory,
+  saveMemory,
+} from "@/lib/memory/store";
+
+export async function syncMemory(
+  extracted: ExtractedMemory
+) {
+
+  const memory =
+    await loadMemory();
+
+  Object.assign(
+    memory.company,
+    extracted.company
+  );
+
+  Object.assign(
+    memory.founder,
+    extracted.founder
+  );
+
+  Object.assign(
+    memory.product,
+    extracted.product
+  );
+
+  await saveMemory(memory);
+
+  console.log(
+    "💾 Profile Updated"
+  );
+
+}

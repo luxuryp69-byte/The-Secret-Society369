@@ -1,0 +1,179 @@
+import type {
+  ExtractedMemory,
+} from "./schema";
+
+import {
+  loadMemory,
+  saveMemory,
+} from "@/lib/memory/store";
+
+function normalizeText(
+  value: string,
+): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function mergeDescriptions(
+  current: string,
+  incoming: string,
+): string {
+  const splitIntoSentences = (
+    value: string,
+  ): string[] =>
+    normalizeText(value)
+      .split(/[.!?]+/)
+      .map((part) => normalizeText(part))
+      .filter(Boolean);
+
+  const existingParts =
+    splitIntoSentences(current);
+
+  const incomingParts =
+    splitIntoSentences(incoming);
+
+  const merged = [
+    ...existingParts,
+  ];
+
+  for (
+    const incomingPart
+    of incomingParts
+  ) {
+    const normalizedIncoming =
+      incomingPart.toLowerCase();
+
+    const alreadyExists =
+      merged.some(
+        (existingPart) => {
+          const normalizedExisting =
+            existingPart.toLowerCase();
+
+          return (
+            normalizedExisting ===
+              normalizedIncoming ||
+            normalizedExisting.includes(
+              normalizedIncoming,
+            ) ||
+            normalizedIncoming.includes(
+              normalizedExisting,
+            )
+          );
+        },
+      );
+
+    if (!alreadyExists) {
+      merged.push(incomingPart);
+    }
+  }
+
+  return merged.join(". ");
+}
+
+function assignNonEmpty(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+) {
+  for (
+    const [key, value]
+    of Object.entries(source)
+  ) {
+    if (
+      typeof value !== "string"
+    ) {
+      continue;
+    }
+
+    const normalized =
+      normalizeText(value);
+
+    if (!normalized) {
+      continue;
+    }
+
+    target[key] = normalized;
+  }
+}
+
+export async function syncMemory(
+  extracted: ExtractedMemory,
+) {
+  const memory =
+    await loadMemory();
+
+  assignNonEmpty(
+    memory.company as Record<
+      string,
+      unknown
+    >,
+    extracted.company as Record<
+      string,
+      unknown
+    >,
+  );
+
+  assignNonEmpty(
+    memory.founder as Record<
+      string,
+      unknown
+    >,
+    extracted.founder as Record<
+      string,
+      unknown
+    >,
+  );
+
+  assignNonEmpty(
+    memory.product as Record<
+      string,
+      unknown
+    >,
+    extracted.product as Record<
+      string,
+      unknown
+    >,
+  );
+
+  const existingDescription =
+    typeof memory.product.description ===
+    "string"
+      ? memory.product.description
+      : "";
+
+  const incomingDescription =
+    typeof extracted.product.description ===
+    "string"
+      ? extracted.product.description
+      : "";
+
+  const mergedDescription =
+    mergeDescriptions(
+      existingDescription,
+      incomingDescription,
+    );
+
+  if (mergedDescription) {
+    memory.product.description =
+      mergedDescription;
+  }
+
+  if (extracted.clearProductName) {
+    delete (
+      memory.product as Record<
+        string,
+        unknown
+      >
+    ).name;
+
+    console.log(
+      "🧹 Product name cleared",
+    );
+  }
+
+  await saveMemory(memory);
+
+  console.log(
+    "💾 Profile Updated",
+  );
+}

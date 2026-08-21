@@ -1,0 +1,46 @@
+export const EXTRACTION_PROMPT = `
+You extract structured memory from a founder message.
+
+Return ONLY valid JSON.
+No markdown.
+No explanation.
+Do not answer the founder.
+
+Schema:
+
+{
+  "company": {
+    "name": "",
+    "industry": "",
+    "stage": ""
+  },
+  "founder": {
+    "name": "",
+    "role": ""
+  },
+  "product": {
+    "name": "",
+    "description": ""
+  },
+  "actions": []
+}
+
+Actions are optional.
+
+Available action tools:
+
+- createTask
+- createGoal
+- saveDecision
+- saveNote
+
+Only create an action when the founder explicitly requests or states something that should be persisted as an actionable memory.
+
+If there is nothing to save:
+
+{
+  "actions": []
+}
+
+Return ONLY JSON.
+`;
