@@ -161,7 +161,7 @@ function includesAny(
   );
 }
 
-function detectStrategicSignal(
+export function detectStrategicSignal(
   message: string,
   memory: unknown,
   knowledge: unknown,
@@ -263,7 +263,11 @@ function detectStrategicSignal(
     includesAny(
       normalizedMessage,
       PRODUCT_SIGNAL_TERMS,
-    );
+    ) ||
+    normalizedMessage.includes("producto demasiado generico") ||
+    normalizedMessage.includes("demasiado generico") ||
+    normalizedMessage.includes("no resuelve bien sus necesidades") ||
+    normalizedMessage.includes("no resuelve sus necesidades");
 
   const messageProductReliabilitySignal =
     includesAny(
@@ -272,27 +276,31 @@ function detectStrategicSignal(
     );
 
   const messageExecutionSignal =
-    normalizedMessage.includes("equipo") &&
     (
-      normalizedMessage.includes("sobrecargado") ||
-      normalizedMessage.includes("sobrecarga") ||
-      normalizedMessage.includes("sin capacidad") ||
-      normalizedMessage.includes("capacidad limitada") ||
-      normalizedMessage.includes("falta de capacidad") ||
-      normalizedMessage.includes("capacidad de ejecucion")
-    );
+      normalizedMessage.includes("equipo") &&
+      (
+        normalizedMessage.includes("sobrecargado") ||
+        normalizedMessage.includes("sobrecarga") ||
+        normalizedMessage.includes("sin capacidad") ||
+        normalizedMessage.includes("capacidad limitada") ||
+        normalizedMessage.includes("falta de capacidad") ||
+        normalizedMessage.includes("capacidad de ejecucion")
+      )
+    ) ||
+    normalizedMessage.includes("demasiadas iniciativas abiertas") ||
+    normalizedMessage.includes("prioridades cambian constantemente") ||
+    normalizedMessage.includes("proyectos criticos no se terminan");
 
   const messageRetentionUrgencySignal =
-
     normalizedMessage.includes("perdiendo clientes") ||
-
+    normalizedMessage.includes("perdiendo muchos clientes") ||
+    normalizedMessage.includes("estamos perdiendo muchos clientes") ||
     normalizedMessage.includes("clientes demasiado rapido") ||
-
     normalizedMessage.includes("clientes muy rapido") ||
-
     normalizedMessage.includes("no permanecen") ||
-
-    normalizedMessage.includes("abandono temprano");
+    normalizedMessage.includes("abandono temprano") ||
+    normalizedMessage.includes("churn ha aumentado") ||
+    normalizedMessage.includes("churn aumento");
 
   const messageRetentionSignal =
     normalizedMessage.includes("retencion") ||
@@ -317,9 +325,25 @@ function detectStrategicSignal(
     normalizedMessage.includes("adquisicion de clientes");
 
   const messageCapitalSignal =
-    runwayMonths !== null &&
-    runwayMonths <= 6 &&
-    normalizedMessage.includes("runway");
+    (
+      runwayMonths !== null &&
+      runwayMonths <= 6 &&
+      normalizedMessage.includes("runway")
+    ) ||
+    (
+      normalizedMessage.includes("menos de tres meses") &&
+      normalizedMessage.includes("runway")
+    ) ||
+    (
+      normalizedMessage.includes("menos de seis meses") &&
+      normalizedMessage.includes("runway")
+    ) ||
+    normalizedMessage.includes("preservar caja") ||
+    normalizedMessage.includes("preservar efectivo") ||
+    (
+      normalizedMessage.includes("burn alto") &&
+      normalizedMessage.includes("runway")
+    );
 
   if (messageCapitalSignal) {
     return {
@@ -979,7 +1003,7 @@ WHAT NOT TO PRIORITIZE
 ${result.whatNotToPrioritize}`;
 }
 
-function strategicFallback(
+export function strategicFallback(
   signal: StrategicSignal,
 ): CEOOutput {
   const primaryPriority =
@@ -1138,25 +1162,20 @@ export async function ceoAgent(
   const memory = context.memory;
   const knowledge = context.knowledge;
 
-  const signal =
-    detectStrategicSignal(
-      message,
-      memory,
-      knowledge,
-    );
+  const signal = detectStrategicSignal(
+    message,
+    memory,
+    knowledge,
+  );
 
   console.log("\n👔 CEO Agent");
-  console.log("🧠 CEO Mode | FAST");
+  console.log("🧠 CEO Mode | STRATEGIC");
 
   console.log(
     `📋 CEO Context | memory=${
-      memory !== undefined
-        ? "yes"
-        : "no"
+      memory !== undefined ? "yes" : "no"
     } | knowledge=${
-      knowledge !== undefined
-        ? "yes"
-        : "no"
+      knowledge !== undefined ? "yes" : "no"
     }`,
   );
 
@@ -1164,35 +1183,62 @@ export async function ceoAgent(
     `🎯 CEO Constraint | ${signal.constraint}`,
   );
 
-  const prompt =
-    buildCEOUserPrompt(
-      message,
-      memory,
-      knowledge,
-      signal,
+  // -------------------------------------------------------
+  // Canonical deterministic decisions
+  // -------------------------------------------------------
+  //
+  // These constraints already have sufficient strategic
+  // evidence. Do not call the model and do not allow it to
+  // reinterpret the underlying business facts.
+  //
+  if (
+    signal.constraint === "demand" ||
+    signal.constraint === "unknown"
+  ) {
+    console.log(
+      `⚡ CEO deterministic strategy | ${signal.constraint}`,
     );
+
+    return normalizeCEOFormatting(
+      toCEOText(
+        strategicFallback(signal),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------
+  // Model-assisted decisions
+  // -------------------------------------------------------
+
+  const prompt = buildCEOUserPrompt(
+    message,
+    memory,
+    knowledge,
+    signal,
+  );
 
   try {
     const raw = await askFast(
       prompt,
       {
         temperature: 0,
-        num_predict: 512,
+        num_predict: 256,
         keep_alive: "10m",
         format: CEO_JSON_SCHEMA,
       },
     );
 
-    const parsed =
-      parseCEOJson(raw);
+    const parsed = parseCEOJson(raw);
 
     if (!parsed) {
       console.warn(
         "⚠️ CEO STRUCTURED OUTPUT | JSON validation failed",
       );
 
-      return toCEOText(
-        strategicFallback(signal),
+      return normalizeCEOFormatting(
+        toCEOText(
+          strategicFallback(signal),
+        ),
       );
     }
 
@@ -1201,8 +1247,14 @@ export async function ceoAgent(
       !parsed.why ||
       !parsed.whatNotToPrioritize
     ) {
-      return toCEOText(
-        strategicFallback(signal),
+      console.warn(
+        "⚠️ CEO STRUCTURED OUTPUT | required fields missing",
+      );
+
+      return normalizeCEOFormatting(
+        toCEOText(
+          strategicFallback(signal),
+        ),
       );
     }
 
@@ -1216,8 +1268,10 @@ export async function ceoAgent(
         "⚠️ CEO STRUCTURED OUTPUT | strategic evidence missing",
       );
 
-      return toCEOText(
-        strategicFallback(signal),
+      return normalizeCEOFormatting(
+        toCEOText(
+          strategicFallback(signal),
+        ),
       );
     }
 
@@ -1227,10 +1281,9 @@ export async function ceoAgent(
         signal,
       );
 
-    const output =
-      toCEOText(
-        normalizedParsed,
-      );
+    const output = toCEOText(
+      normalizedParsed,
+    );
 
     console.log(
       "✅ CEO STRUCTURED OUTPUT | contract=valid",
@@ -1238,15 +1291,17 @@ export async function ceoAgent(
 
     return normalizeCEOFormatting(
       output,
-    ).trim();
+    );
   } catch (error) {
     console.error(
-      "❌ CEO STRUCTURED OUTPUT | failed, using deterministic fallback",
+      "❌ CEO Agent failed",
       error,
     );
 
-    return toCEOText(
-      strategicFallback(signal),
-    ).trim();
+    return normalizeCEOFormatting(
+      toCEOText(
+        strategicFallback(signal),
+      ),
+    );
   }
 }
