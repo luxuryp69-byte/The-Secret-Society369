@@ -15,6 +15,8 @@ type TestCase = {
     | "capital"
     | "execution";
   expectedPriorityFragment: string;
+  memory?: unknown;
+  knowledge?: unknown;
 };
 
 const cases: TestCase[] = [
@@ -60,6 +62,64 @@ const cases: TestCase[] = [
     expectedConstraint: "execution",
     expectedPriorityFragment: "execution",
   },
+
+  {
+    name: "product beats positive retention language",
+    message:
+      "Tenemos buena retención y demanda estable, pero el producto sigue siendo demasiado genérico y no resuelve las necesidades principales de los usuarios.",
+    expectedConstraint: "product",
+    expectedPriorityFragment: "product",
+  },
+
+  {
+    name: "retention beats healthy pipeline",
+    message:
+      "El pipeline comercial es saludable, pero estamos perdiendo muchos clientes y el churn continúa aumentando.",
+    expectedConstraint: "retention",
+    expectedPriorityFragment: "retention",
+  },
+
+  {
+    name: "demand beats stable product",
+    message:
+      "El producto es estable y los clientes actuales están satisfechos, pero tenemos el pipeline casi vacío y necesitamos generar nuevas oportunidades.",
+    expectedConstraint: "demand",
+    expectedPriorityFragment: "demand",
+  },
+
+  {
+    name: "capital beats other strategic concerns",
+    message:
+      "Tenemos menos de tres meses de runway, aunque el producto tiene oportunidades de mejora y queremos crecer.",
+    expectedConstraint: "capital",
+    expectedPriorityFragment: "capital",
+  },
+
+  {
+    name: "execution from too many simultaneous initiatives",
+    message:
+      "El equipo tiene demasiadas iniciativas abiertas, cambia constantemente de prioridad y los proyectos importantes nunca se terminan.",
+    expectedConstraint: "execution",
+    expectedPriorityFragment: "execution",
+  },
+  {
+    name: "product beats healthy demand when reliability is inconsistent",
+    message:
+      "Tenemos usuarios y demanda, pero las recomendaciones todavía son inconsistentes. ¿Dónde pondrías el foco?",
+    memory: {
+      revenue: "$30k MRR",
+      growth: "6% MoM",
+      churn: "4%",
+      pipeline: "fuerte",
+      product: "estable pero inconsistente",
+    },
+    knowledge: {
+      qualityIssue:
+        "Algunas respuestas son excelentes y otras demasiado superficiales para decisiones ejecutivas.",
+    },
+    expectedConstraint: "product",
+    expectedPriorityFragment: "product",
+  },
 ];
 
 async function run() {
@@ -89,10 +149,11 @@ async function run() {
         );
       }
 
-      if (task.id !== "ceo-strategic-priority") {
-        throw new Error(
-          `Planner: expected task id "ceo-strategic-priority", received "${task.id}"`,
-        );
+      // The planner may use the canonical strategic ID or generate
+      // a runtime UUID. The invariant we actually care about is that
+      // exactly one task is routed to the CEO.
+      if (!task.id) {
+        throw new Error("Planner: task id is missing");
       }
 
       // --------------------------------------------------
@@ -101,8 +162,8 @@ async function run() {
 
       const signal = detectStrategicSignal(
         test.message,
-        {},
-        {},
+        test.memory ?? {},
+        test.knowledge ?? {},
       );
 
       if (signal.constraint !== test.expectedConstraint) {

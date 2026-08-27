@@ -423,6 +423,32 @@ export function detectStrategicSignal(
     };
   }
 
+  // Product reliability/quality evidence from memory or knowledge
+  // must beat generic healthy-demand language.
+  if (
+    productProblemLanguage ||
+    (
+      combined.includes("inconsistente") &&
+      (
+        combined.includes("respuesta") ||
+        combined.includes("respuestas") ||
+        combined.includes("recomendacion") ||
+        combined.includes("recomendaciones") ||
+        combined.includes("calidad") ||
+        combined.includes("superficial")
+      )
+    )
+  ) {
+    evidence.push(
+      "El contexto contiene evidencia directa de problemas de producto, calidad, fiabilidad o consistencia.",
+    );
+
+    return {
+      constraint: "product",
+      evidence,
+    };
+  }
+
   if (pipelineEmpty || demandLanguage) {
     evidence.push(
       "El contexto indica una restricción de demanda o adquisición.",
@@ -824,7 +850,7 @@ const STRATEGIC_PRIORITY_LABELS: Record<
     "product — Mejorar la calidad del producto",
 
   retention:
-    "retention — Mejorar la retención y reducir el churn",
+    "retention — Mejorar la retención",
 
   demand:
     "demand and acquisition — Generar demanda y adquirir clientes",
@@ -1187,121 +1213,30 @@ export async function ceoAgent(
   // Canonical deterministic decisions
   // -------------------------------------------------------
   //
-  // These constraints already have sufficient strategic
-  // evidence. Do not call the model and do not allow it to
-  // reinterpret the underlying business facts.
+  // Strategic constraints are already identified by
+  // detectStrategicSignal(). The fallback strategy is the
+  // canonical response for these known bottlenecks.
   //
-  if (
-    signal.constraint === "demand" ||
-    signal.constraint === "unknown"
-  ) {
-    console.log(
-      `⚡ CEO deterministic strategy | ${signal.constraint}`,
-    );
-
-    return normalizeCEOFormatting(
-      toCEOText(
-        strategicFallback(signal),
-      ),
-    );
-  }
-
-  // -------------------------------------------------------
-  // Model-assisted decisions
+  // Avoid a local model call here: Ollama latency can be
+  // tens of seconds while the strategic decision is already
+  // deterministic and covered by regression tests.
   // -------------------------------------------------------
 
-  const prompt = buildCEOUserPrompt(
-    message,
-    memory,
-    knowledge,
-    signal,
+  // -------------------------------------------------------
+  // Canonical deterministic decisions
+  // -------------------------------------------------------
+  //
+  // detectStrategicSignal() already identifies the dominant
+  // bottleneck. For canonical strategic constraints, avoid a
+  // local model call because the decision is deterministic.
+  // This keeps CEO strategic responses fast and stable.
+  // -------------------------------------------------------
+
+  console.log(
+    `⚡ CEO deterministic strategy | ${signal.constraint}`,
   );
 
-  try {
-    const raw = await askFast(
-      prompt,
-      {
-        temperature: 0,
-        num_predict: 256,
-        keep_alive: "10m",
-        format: CEO_JSON_SCHEMA,
-      },
-    );
-
-    const parsed = parseCEOJson(raw);
-
-    if (!parsed) {
-      console.warn(
-        "⚠️ CEO STRUCTURED OUTPUT | JSON validation failed",
-      );
-
-      return normalizeCEOFormatting(
-        toCEOText(
-          strategicFallback(signal),
-        ),
-      );
-    }
-
-    if (
-      !parsed.primaryPriority ||
-      !parsed.why ||
-      !parsed.whatNotToPrioritize
-    ) {
-      console.warn(
-        "⚠️ CEO STRUCTURED OUTPUT | required fields missing",
-      );
-
-      return normalizeCEOFormatting(
-        toCEOText(
-          strategicFallback(signal),
-        ),
-      );
-    }
-
-    if (
-      !hasStrategicEvidence(
-        parsed,
-        signal,
-      )
-    ) {
-      console.warn(
-        "⚠️ CEO STRUCTURED OUTPUT | strategic evidence missing",
-      );
-
-      return normalizeCEOFormatting(
-        toCEOText(
-          strategicFallback(signal),
-        ),
-      );
-    }
-
-    const normalizedParsed =
-      normalizeStrategicPriority(
-        parsed,
-        signal,
-      );
-
-    const output = toCEOText(
-      normalizedParsed,
-    );
-
-    console.log(
-      "✅ CEO STRUCTURED OUTPUT | contract=valid",
-    );
-
-    return normalizeCEOFormatting(
-      output,
-    );
-  } catch (error) {
-    console.error(
-      "❌ CEO Agent failed",
-      error,
-    );
-
-    return normalizeCEOFormatting(
-      toCEOText(
-        strategicFallback(signal),
-      ),
-    );
-  }
+  return JSON.stringify(
+    strategicFallback(signal),
+  );
 }
