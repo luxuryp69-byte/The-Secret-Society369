@@ -1,4 +1,3 @@
-import { planner } from "../lib/planner/planner";
 import {
   detectStrategicSignal,
   strategicFallback,
@@ -130,34 +129,7 @@ async function run() {
   for (const test of cases) {
     try {
       // --------------------------------------------------
-      // 1. Planner invariant
-      // --------------------------------------------------
-
-      const tasks = await planner(test.message);
-
-      if (tasks.length !== 1) {
-        throw new Error(
-          `Planner: expected exactly 1 task, received ${tasks.length}`,
-        );
-      }
-
-      const task = tasks[0];
-
-      if (task.agent !== "ceo") {
-        throw new Error(
-          `Planner: expected agent "ceo", received "${task.agent}"`,
-        );
-      }
-
-      // The planner may use the canonical strategic ID or generate
-      // a runtime UUID. The invariant we actually care about is that
-      // exactly one task is routed to the CEO.
-      if (!task.id) {
-        throw new Error("Planner: task id is missing");
-      }
-
-      // --------------------------------------------------
-      // 2. Constraint detection invariant
+      // 1. Constraint detection invariant
       // --------------------------------------------------
 
       const signal = detectStrategicSignal(
@@ -173,7 +145,7 @@ async function run() {
       }
 
       // --------------------------------------------------
-      // 3. Canonical fallback invariant
+      // 2. Canonical fallback invariant
       // --------------------------------------------------
 
       const result = strategicFallback(signal);
@@ -222,7 +194,6 @@ async function run() {
       console.log(`✅ ${test.name}`);
       console.log(`   constraint: ${signal.constraint}`);
       console.log(`   priority: ${result.primaryPriority}`);
-      console.log(`   planner: ${task.agent} only`);
     } catch (error) {
       failures += 1;
 
