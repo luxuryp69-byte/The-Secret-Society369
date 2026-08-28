@@ -1,0 +1,6 @@
+
+# Vercel
+.vercel/
+
+# Local environment backups
+.env.local.backup-*
