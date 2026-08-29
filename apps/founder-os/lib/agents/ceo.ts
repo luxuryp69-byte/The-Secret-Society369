@@ -74,6 +74,41 @@ type StrategicSignal = {
   evidence: string[];
 };
 
+function constraintPriority(
+  constraint: StrategicConstraint,
+): number {
+  switch (constraint) {
+    case "capital":
+      return 6;
+
+    case "product":
+      return 5;
+
+    case "retention":
+      return 4;
+
+    case "demand":
+      return 3;
+
+    case "execution":
+      return 2;
+
+    case "unknown":
+      return 0;
+  }
+}
+
+function selectHigherPrioritySignal(
+  signals: StrategicSignal[],
+): StrategicSignal {
+  return signals.reduce((winner, candidate) =>
+    constraintPriority(candidate.constraint) >
+    constraintPriority(winner.constraint)
+      ? candidate
+      : winner,
+  );
+}
+
 const MAX_CONTEXT_CHARS = 12000;
 
 function formatContext(value: unknown): string {
@@ -345,57 +380,63 @@ export function detectStrategicSignal(
       normalizedMessage.includes("runway")
     );
 
+  const messageSignals: StrategicSignal[] = [];
+
   if (messageCapitalSignal) {
-    return {
+    messageSignals.push({
       constraint: "capital",
       evidence: [
         `Runway corto detectado en el mensaje actual: ${runwayMonths} meses.`,
       ],
-    };
+    });
   }
 
   if (
     messageProductSignal ||
     messageProductReliabilitySignal
   ) {
-    return {
+    messageSignals.push({
       constraint: "product",
       evidence: [
         "El mensaje actual contiene evidencia directa de problemas de producto, calidad o valor.",
       ],
-    };
+    });
   }
 
   if (messageExecutionSignal) {
-    return {
+    messageSignals.push({
       constraint: "execution",
       evidence: [
         "El mensaje actual contiene evidencia directa de una restricción de capacidad o ejecución.",
       ],
-    };
+    });
   }
 
   if (
     messageRetentionSignal ||
     messageRetentionUrgencySignal
   ) {
-    return {
+    messageSignals.push({
       constraint: "retention",
       evidence: [
         churn !== null
           ? `Churn detectado en el mensaje actual: ${churn}%.`
           : "El mensaje actual menciona explícitamente retención o abandono.",
       ],
-    };
+    });
   }
 
   if (messageDemandSignal) {
-    return {
+    messageSignals.push({
       constraint: "demand",
       evidence: [
         "El mensaje actual contiene evidencia directa de una restricción de demanda o adquisición.",
       ],
-    };
+    });
+  }
+
+  if (messageSignals.length > 0) {
+    return selectHigherPrioritySignal(messageSignals);
   }
 
   if (
