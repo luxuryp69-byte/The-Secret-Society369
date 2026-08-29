@@ -72,6 +72,7 @@ type StrategicConstraint =
 type StrategicSignal = {
   constraint: StrategicConstraint;
   evidence: string[];
+  confidence: number;
 };
 
 function constraintPriority(
@@ -98,15 +99,44 @@ function constraintPriority(
   }
 }
 
+function clampConfidence(
+  confidence: number,
+): number {
+  return Math.max(0, Math.min(100, confidence));
+}
+
+function signalScore(
+  signal: StrategicSignal,
+): number {
+  return (
+    clampConfidence(signal.confidence) * 100 +
+    constraintPriority(signal.constraint)
+  );
+}
+
 function selectHigherPrioritySignal(
   signals: StrategicSignal[],
 ): StrategicSignal {
-  return signals.reduce((winner, candidate) =>
-    constraintPriority(candidate.constraint) >
-    constraintPriority(winner.constraint)
-      ? candidate
-      : winner,
-  );
+  if (signals.length === 0) {
+    return {
+      constraint: "unknown",
+      evidence: [
+        "No existe evidencia suficiente para identificar un cuello de botella dominante.",
+      ],
+      confidence: 0,
+    };
+  }
+
+  return signals.reduce((winner, candidate) => {
+    const winnerScore = signalScore(winner);
+    const candidateScore = signalScore(candidate);
+
+    if (candidateScore > winnerScore) {
+      return candidate;
+    }
+
+    return winner;
+  });
 }
 
 const MAX_CONTEXT_CHARS = 12000;
@@ -388,6 +418,10 @@ export function detectStrategicSignal(
       evidence: [
         `Runway corto detectado en el mensaje actual: ${runwayMonths} meses.`,
       ],
+      confidence:
+        runwayMonths !== null && runwayMonths <= 3
+          ? 100
+          : 90,
     });
   }
 
@@ -400,6 +434,10 @@ export function detectStrategicSignal(
       evidence: [
         "El mensaje actual contiene evidencia directa de problemas de producto, calidad o valor.",
       ],
+      confidence:
+        messageProductReliabilitySignal
+          ? 90
+          : 80,
     });
   }
 
@@ -409,6 +447,7 @@ export function detectStrategicSignal(
       evidence: [
         "El mensaje actual contiene evidencia directa de una restricción de capacidad o ejecución.",
       ],
+      confidence: 80,
     });
   }
 
@@ -423,6 +462,14 @@ export function detectStrategicSignal(
           ? `Churn detectado en el mensaje actual: ${churn}%.`
           : "El mensaje actual menciona explícitamente retención o abandono.",
       ],
+      confidence:
+        churn !== null && churn >= 15
+          ? 95
+          : churn !== null && churn >= 8
+            ? 90
+            : messageRetentionUrgencySignal
+              ? 85
+              : 75,
     });
   }
 
@@ -432,6 +479,12 @@ export function detectStrategicSignal(
       evidence: [
         "El mensaje actual contiene evidencia directa de una restricción de demanda o adquisición.",
       ],
+      confidence:
+        normalizedMessage.includes("pipeline casi vacio") ||
+        normalizedMessage.includes("pipeline vacio") ||
+        normalizedMessage.includes("sin pipeline")
+          ? 90
+          : 75,
     });
   }
 
