@@ -114,7 +114,7 @@ function signalScore(
   );
 }
 
-function selectHigherPrioritySignal(
+export function selectHigherPrioritySignal(
   signals: StrategicSignal[],
 ): StrategicSignal {
   if (signals.length === 0) {
@@ -514,6 +514,12 @@ export function detectStrategicSignal(
     return {
       constraint: "retention",
       evidence,
+      confidence:
+        churn !== null && churn >= 15
+          ? 95
+          : churn !== null && churn >= 8
+            ? 90
+            : 85,
     };
   }
 
@@ -540,6 +546,7 @@ export function detectStrategicSignal(
     return {
       constraint: "product",
       evidence,
+      confidence: 85,
     };
   }
 
@@ -563,6 +570,7 @@ export function detectStrategicSignal(
     return {
       constraint: "demand",
       evidence,
+      confidence: pipelineEmpty ? 90 : 80,
     };
   }
 
@@ -577,6 +585,10 @@ export function detectStrategicSignal(
     return {
       constraint: "capital",
       evidence,
+      confidence:
+        runwayMonths !== null && runwayMonths <= 3
+          ? 100
+          : 95,
     };
   }
 
@@ -588,6 +600,7 @@ export function detectStrategicSignal(
     return {
       constraint: "product",
       evidence,
+      confidence: 85,
     };
   }
 
@@ -604,6 +617,7 @@ export function detectStrategicSignal(
     return {
       constraint: "execution",
       evidence,
+      confidence: 75,
     };
   }
 
@@ -612,6 +626,7 @@ export function detectStrategicSignal(
     evidence: [
       "No existe evidencia suficiente para identificar un cuello de botella dominante.",
     ],
+    confidence: 0,
   };
 }
 

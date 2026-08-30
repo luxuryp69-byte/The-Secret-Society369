@@ -3,17 +3,20 @@ import {
   strategicFallback,
 } from "../lib/agents/ceo";
 
+type StrategicConstraint =
+  | "unknown"
+  | "demand"
+  | "retention"
+  | "product"
+  | "capital"
+  | "execution";
+
 type TestCase = {
   name: string;
   message: string;
-  expectedConstraint:
-    | "unknown"
-    | "demand"
-    | "retention"
-    | "product"
-    | "capital"
-    | "execution";
+  expectedConstraint: StrategicConstraint;
   expectedPriorityFragment: string;
+  expectedConfidence?: number | { min: number; max: number };
   memory?: unknown;
   knowledge?: unknown;
 };
@@ -102,6 +105,105 @@ const cases: TestCase[] = [
     expectedPriorityFragment: "execution",
   },
   {
+    name: "unknown has zero confidence",
+    message:
+      "La empresa está funcionando normalmente y queremos saber qué debería priorizar el CEO.",
+    expectedConstraint: "unknown",
+    expectedPriorityFragment: "unknown",
+    expectedConfidence: 0,
+  },
+
+  {
+    name: "severe churn produces high retention confidence",
+    message:
+      "Estamos perdiendo clientes rápidamente y el churn es de 18%.",
+    expectedConstraint: "retention",
+    expectedPriorityFragment: "retention",
+    expectedConfidence: { min: 95, max: 95 },
+  },
+
+  {
+    name: "empty pipeline produces high demand confidence",
+    message:
+      "Nuestro pipeline está completamente vacío y necesitamos nuevas oportunidades.",
+    expectedConstraint: "demand",
+    expectedPriorityFragment: "demand",
+    expectedConfidence: { min: 90, max: 90 },
+  },
+
+  {
+    name: "critical runway produces maximum capital confidence",
+    message:
+      "Solo tenemos 2 meses de runway y necesitamos preservar caja.",
+    expectedConstraint: "capital",
+    expectedPriorityFragment: "capital",
+    expectedConfidence: { min: 100, max: 100 },
+  },
+
+  {
+    name: "critical capital beats strong product concerns",
+    message:
+      "Solo tenemos 2 meses de runway. Además, el producto es inconsistente y los usuarios reportan problemas importantes de calidad.",
+    expectedConstraint: "capital",
+    expectedPriorityFragment: "capital",
+    expectedConfidence: 100,
+  },
+
+  {
+    name: "severe retention beats moderate demand",
+    message:
+      "Estamos perdiendo clientes rápidamente y el churn es de 18%. El pipeline necesita más oportunidades, pero todavía tenemos algunas oportunidades comerciales.",
+    expectedConstraint: "retention",
+    expectedPriorityFragment: "retention",
+    expectedConfidence: 95,
+  },
+
+  {
+    name: "strong product issue beats weaker demand language",
+    message:
+      "Necesitamos mejorar la adquisición, pero el problema principal es que el producto es inconsistente, las respuestas son demasiado superficiales y los usuarios no reciben suficiente valor.",
+    expectedConstraint: "product",
+    expectedPriorityFragment: "product",
+    expectedConfidence: { min: 85, max: 90 },
+  },
+
+  {
+    name: "critical capital beats execution overload",
+    message:
+      "Tenemos solo 2 meses de runway. El equipo también tiene demasiadas iniciativas abiertas y problemas de capacidad.",
+    expectedConstraint: "capital",
+    expectedPriorityFragment: "capital",
+    expectedConfidence: 100,
+  },
+
+  {
+    name: "empty pipeline beats generic execution concerns",
+    message:
+      "Nuestro pipeline está completamente vacío y necesitamos generar oportunidades. El equipo también tiene varias iniciativas abiertas.",
+    expectedConstraint: "demand",
+    expectedPriorityFragment: "demand",
+    expectedConfidence: 90,
+  },
+
+  {
+    name: "severe churn beats product concerns",
+    message:
+      "El churn es de 18% y estamos perdiendo clientes rápidamente. El producto también necesita algunas mejoras de calidad.",
+    expectedConstraint: "retention",
+    expectedPriorityFragment: "retention",
+    expectedConfidence: 95,
+  },
+
+  {
+    name: "critical capital beats severe retention",
+    message:
+      "Tenemos 2 meses de runway y el churn es de 18%. Necesitamos decidir cuál es el cuello de botella dominante.",
+    expectedConstraint: "capital",
+    expectedPriorityFragment: "capital",
+    expectedConfidence: 100,
+  },
+
+  {
     name: "product beats healthy demand when reliability is inconsistent",
     message:
       "Tenemos usuarios y demanda, pero las recomendaciones todavía son inconsistentes. ¿Dónde pondrías el foco?",
@@ -145,7 +247,29 @@ async function run() {
       }
 
       // --------------------------------------------------
-      // 2. Canonical fallback invariant
+      // 2. Confidence invariant
+      // --------------------------------------------------
+
+      if (test.expectedConfidence !== undefined) {
+        if (typeof test.expectedConfidence === "number") {
+          if (signal.confidence !== test.expectedConfidence) {
+            throw new Error(
+              `Confidence: expected "${test.expectedConfidence}", received "${signal.confidence}"`,
+            );
+          }
+        } else {
+          const { min, max } = test.expectedConfidence;
+
+          if (signal.confidence < min || signal.confidence > max) {
+            throw new Error(
+              `Confidence: expected between "${min}" and "${max}", received "${signal.confidence}"`,
+            );
+          }
+        }
+      }
+
+      // --------------------------------------------------
+      // 3. Canonical fallback invariant
       // --------------------------------------------------
 
       const result = strategicFallback(signal);
