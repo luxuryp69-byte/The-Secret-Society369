@@ -129,6 +129,53 @@ const cases: TestCase[] = [
   },
 
   {
+    name: "generic team mention does not create execution signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      team:
+        "Tenemos un equipo pequeño trabajando en el producto.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic capacity mention does not create execution signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    knowledge: {
+      company:
+        "La empresa tiene capacidad limitada como startup temprana.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit overloaded team creates execution signal",
+    message:
+      "Necesitamos decidir la prioridad principal.",
+    memory: {
+      operations:
+        "El equipo está sobrecargado, tiene demasiadas iniciativas abiertas y los proyectos críticos no se terminan.",
+    },
+    expectedConstraint: "execution",
+  },
+
+  {
+    name: "explicit execution evidence does not override stronger capital evidence",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      operations:
+        "El equipo está sobrecargado y las prioridades cambian constantemente.",
+    },
+    knowledge: {
+      runway: "2 meses",
+    },
+    expectedConstraint: "capital",
+  },
+
+  {
     name: "no evidence across message memory or knowledge returns unknown",
     message:
       "Queremos saber cuál debería ser la prioridad.",

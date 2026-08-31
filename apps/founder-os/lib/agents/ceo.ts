@@ -597,16 +597,28 @@ export function detectStrategicSignal(
     });
   }
 
-  if (
-    combined.includes("equipo") ||
-    combined.includes("ejecucion") ||
-    combined.includes("capacidad") ||
-    combined.includes("recursos limitados")
-  ) {
+  const executionLanguage =
+    (
+      combined.includes("equipo") &&
+      (
+        combined.includes("sobrecargado") ||
+        combined.includes("sobrecarga") ||
+        combined.includes("sin capacidad") ||
+        combined.includes("capacidad limitada") ||
+        combined.includes("falta de capacidad") ||
+        combined.includes("recursos limitados")
+      )
+    ) ||
+    combined.includes("demasiadas iniciativas abiertas") ||
+    combined.includes("prioridades cambian constantemente") ||
+    combined.includes("proyectos criticos no se terminan") ||
+    combined.includes("cuello de botella de ejecucion");
+
+  if (executionLanguage) {
     contextSignals.push({
       constraint: "execution",
       evidence: [
-        "El contexto indica una posible restricción de ejecución o capacidad.",
+        "El contexto contiene evidencia directa de una restricción de capacidad, foco o ejecución.",
       ],
       confidence: 75,
     });
