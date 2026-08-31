@@ -190,20 +190,14 @@ const PRODUCT_SIGNAL_TERMS = [
   "respuestas genericas",
   "respuestas demasiado genericas",
   "respuesta generica",
-  "calidad de respuestas",
-  "calidad del producto",
   "producto inestable",
   "problemas de producto",
   "problemas importantes de estabilidad",
-  "estabilidad del producto",
   "problemas de estabilidad",
   "problemas de calidad",
   "bugs",
   "errores",
-  "fiabilidad",
-  "usabilidad",
   "poco valor",
-  "valor del producto",
   "producto no entrega",
   "producto no cumple",
 ] as const;
@@ -293,22 +287,36 @@ export function detectStrategicSignal(
     (
       combined.includes("producto") &&
       (
-        combined.includes("estabilidad") ||
-        combined.includes("calidad") ||
-        combined.includes("experiencia de usuario")
+        combined.includes("inconsistente") ||
+        combined.includes("superficial") ||
+        combined.includes("generico") ||
+        combined.includes("generica") ||
+        combined.includes("deficiente") ||
+        combined.includes("problema") ||
+        combined.includes("problemas") ||
+        combined.includes("falla") ||
+        combined.includes("fallas") ||
+        combined.includes("no funciona") ||
+        combined.includes("no resuelve")
       )
     ) ||
     (
-      combined.includes("currentfocus") &&
-      combined.includes("calidad")
+      combined.includes("respuestas") &&
+      (
+        combined.includes("genericas") ||
+        combined.includes("superficiales") ||
+        combined.includes("inconsistentes") ||
+        combined.includes("poco profundas")
+      )
     ) ||
     (
-      combined.includes("currentproblem") &&
-      combined.includes("generica")
-    ) ||
-    combined.includes("respuestas ejecutivas") ||
-    combined.includes(
-      "recomendaciones estrategicas profundas",
+      combined.includes("recomendaciones estrategicas") &&
+      (
+        combined.includes("superficiales") ||
+        combined.includes("genericas") ||
+        combined.includes("inconsistentes") ||
+        combined.includes("poco profundas")
+      )
     );
 
   const runwayMatch =

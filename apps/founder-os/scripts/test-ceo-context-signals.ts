@@ -176,6 +176,50 @@ const cases: TestCase[] = [
   },
 
   {
+    name: "positive product quality goal does not create product signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      goal:
+        "Queremos mejorar continuamente la calidad del producto.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic user experience mention does not create product signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      product:
+        "La experiencia de usuario es importante para nuestra estrategia.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "strategic recommendations mention alone does not create product signal",
+    message:
+      "Necesitamos identificar la prioridad principal.",
+    memory: {
+      capability:
+        "El sistema genera recomendaciones estratégicas profundas.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit inconsistent product quality creates product signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      product:
+        "El producto es inconsistente y las respuestas son superficiales.",
+    },
+    expectedConstraint: "product",
+  },
+
+  {
     name: "no evidence across message memory or knowledge returns unknown",
     message:
       "Queremos saber cuál debería ser la prioridad.",
