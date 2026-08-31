@@ -492,39 +492,48 @@ export function detectStrategicSignal(
     return selectHigherPrioritySignal(messageSignals);
   }
 
+  // -------------------------------------------------------
+  // Context signals: memory + knowledge
+  //
+  // Unlike direct message signals, contextual evidence may
+  // contain multiple simultaneous constraints. Collect every
+  // candidate first, then resolve the winner deterministically
+  // by confidence and strategic priority.
+  // -------------------------------------------------------
+
+  const contextSignals: StrategicSignal[] = [];
+
   if (
     retentionLanguage ||
     (churn !== null && churn >= 8)
   ) {
-    evidence.push(
+    const contextEvidence: string[] = [
       churn !== null
         ? `Churn detectado: ${churn}%.`
         : "El contexto menciona explícitamente retención o abandono.",
-    );
+    ];
 
     if (
       combined.includes("satisfechos") &&
       combined.includes("abandon")
     ) {
-      evidence.push(
+      contextEvidence.push(
         "Los clientes que permanecen están satisfechos, pero existe abandono temprano.",
       );
     }
 
-    return {
+    contextSignals.push({
       constraint: "retention",
-      evidence,
+      evidence: contextEvidence,
       confidence:
         churn !== null && churn >= 15
           ? 95
           : churn !== null && churn >= 8
             ? 90
             : 85,
-    };
+    });
   }
 
-  // Product reliability/quality evidence from memory or knowledge
-  // must beat generic healthy-demand language.
   if (
     productProblemLanguage ||
     (
@@ -539,69 +548,53 @@ export function detectStrategicSignal(
       )
     )
   ) {
-    evidence.push(
-      "El contexto contiene evidencia directa de problemas de producto, calidad, fiabilidad o consistencia.",
-    );
-
-    return {
+    contextSignals.push({
       constraint: "product",
-      evidence,
+      evidence: [
+        "El contexto contiene evidencia directa de problemas de producto, calidad, fiabilidad o consistencia.",
+      ],
       confidence: 85,
-    };
+    });
   }
 
   if (pipelineEmpty || demandLanguage) {
-    evidence.push(
+    const contextEvidence: string[] = [
       "El contexto indica una restricción de demanda o adquisición.",
-    );
+    ];
 
     if (pipelineEmpty) {
-      evidence.push(
+      contextEvidence.push(
         "El pipeline comercial está casi vacío o vacío.",
       );
     }
 
     if (churn !== null && churn < 5) {
-      evidence.push(
+      contextEvidence.push(
         `Churn bajo: ${churn}%, por lo que retención no parece ser el cuello de botella principal.`,
       );
     }
 
-    return {
+    contextSignals.push({
       constraint: "demand",
-      evidence,
+      evidence: contextEvidence,
       confidence: pipelineEmpty ? 90 : 80,
-    };
+    });
   }
 
   if (
     runwayMonths !== null &&
     runwayMonths <= 6
   ) {
-    evidence.push(
-      `Runway corto detectado: ${runwayMonths} meses.`,
-    );
-
-    return {
+    contextSignals.push({
       constraint: "capital",
-      evidence,
+      evidence: [
+        `Runway corto detectado: ${runwayMonths} meses.`,
+      ],
       confidence:
-        runwayMonths !== null && runwayMonths <= 3
+        runwayMonths <= 3
           ? 100
           : 95,
-    };
-  }
-
-  if (productProblemLanguage) {
-    evidence.push(
-      "El contexto contiene evidencia directa de problemas de producto, calidad o valor.",
-    );
-
-    return {
-      constraint: "product",
-      evidence,
-      confidence: 85,
-    };
+    });
   }
 
   if (
@@ -610,24 +603,16 @@ export function detectStrategicSignal(
     combined.includes("capacidad") ||
     combined.includes("recursos limitados")
   ) {
-    evidence.push(
-      "El contexto indica una posible restricción de ejecución o capacidad.",
-    );
-
-    return {
+    contextSignals.push({
       constraint: "execution",
-      evidence,
+      evidence: [
+        "El contexto indica una posible restricción de ejecución o capacidad.",
+      ],
       confidence: 75,
-    };
+    });
   }
 
-  return {
-    constraint: "unknown",
-    evidence: [
-      "No existe evidencia suficiente para identificar un cuello de botella dominante.",
-    ],
-    confidence: 0,
-  };
+  return selectHigherPrioritySignal(contextSignals);
 }
 
 function strategicInstruction(
