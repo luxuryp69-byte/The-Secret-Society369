@@ -220,6 +220,215 @@ const cases: TestCase[] = [
   },
 
   {
+    name: "positive demand goal does not create demand signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      goal:
+        "Queremos generar más demanda y adquirir nuevos clientes.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic customer acquisition strategy does not create demand signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      strategy:
+        "La adquisición de clientes es importante para nuestro crecimiento.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "healthy pipeline mention does not create demand signal",
+    message:
+      "Necesitamos identificar la prioridad principal.",
+    memory: {
+      sales:
+        "Tenemos un pipeline saludable y varias oportunidades activas.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit empty pipeline creates demand signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      sales:
+        "El pipeline está casi vacío y faltan nuevos clientes.",
+    },
+    expectedConstraint: "demand",
+  },
+
+  {
+    name: "positive retention goal does not create retention signal",
+    message:
+      "Necesitamos identificar la prioridad principal.",
+    memory: {
+      goal:
+        "Queremos mejorar continuamente la retención de nuestros clientes.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic churn strategy does not create retention signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      strategy:
+        "La estrategia incluye mejorar la retención y reducir el churn.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic customer satisfaction mention does not create retention signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      customers:
+        "La satisfacción y retención de clientes son importantes.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit customer abandonment creates retention signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      customers:
+        "Los clientes están abandonando el producto demasiado rápido.",
+    },
+    expectedConstraint: "retention",
+  },
+
+  {
+    name: "explicit high churn creates retention signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      metrics:
+        "El churn actual es 18%.",
+    },
+    expectedConstraint: "retention",
+  },
+
+  {
+    name: "positive team capacity goal does not create execution signal",
+    message:
+      "Necesitamos identificar la prioridad principal.",
+    memory: {
+      goal:
+        "Queremos aumentar la capacidad del equipo durante este trimestre.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic execution strategy does not create execution signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      strategy:
+        "La ejecución disciplinada es importante para alcanzar nuestros objetivos.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic multiple projects mention does not create execution signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      roadmap:
+        "Tenemos varios proyectos planificados para los próximos meses.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit overloaded team creates execution signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      team:
+        "El equipo está sobrecargado y no tiene capacidad para completar las prioridades.",
+    },
+    expectedConstraint: "execution",
+  },
+
+  {
+    name: "explicit unfinished critical projects creates execution signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      execution:
+        "Los proyectos críticos no se terminan y las prioridades cambian constantemente.",
+    },
+    expectedConstraint: "execution",
+  },
+
+  {
+    name: "positive fundraising goal does not create capital signal",
+    message:
+      "Necesitamos identificar la prioridad principal.",
+    memory: {
+      goal:
+        "Queremos levantar capital para acelerar nuestro crecimiento.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic runway strategy does not create capital signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      strategy:
+        "La estrategia financiera busca extender el runway de la empresa.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "generic burn rate mention does not create capital signal",
+    message:
+      "Necesitamos identificar el cuello de botella dominante.",
+    memory: {
+      finance:
+        "Monitoreamos regularmente el burn rate y la posición de caja.",
+    },
+    expectedConstraint: "unknown",
+  },
+
+  {
+    name: "explicit short runway creates capital signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    memory: {
+      finance:
+        "Solo tenemos 4 meses de runway disponibles.",
+    },
+    expectedConstraint: "capital",
+  },
+
+  {
+    name: "critical runway creates maximum capital signal",
+    message:
+      "Necesitamos decidir la prioridad estratégica.",
+    knowledge: {
+      finance:
+        "La empresa tiene menos de 3 meses de runway y debe preservar caja.",
+    },
+    expectedConstraint: "capital",
+  },
+
+  {
     name: "no evidence across message memory or knowledge returns unknown",
     message:
       "Queremos saber cuál debería ser la prioridad.",

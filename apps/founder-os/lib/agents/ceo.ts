@@ -258,22 +258,37 @@ export function detectStrategicSignal(
     );
 
   const demandLanguage =
-    combined.includes("conseguir clientes") ||
-    combined.includes("conseguir cliente") ||
-    combined.includes("demanda") ||
-    combined.includes("adquisicion") ||
-    combined.includes("adquisicion de clientes") ||
     combined.includes("pipeline casi vacio") ||
     combined.includes("pipeline vacio") ||
+    combined.includes("sin pipeline") ||
     combined.includes("pocos clientes") ||
-    combined.includes("falta de clientes");
+    combined.includes("falta de clientes") ||
+    combined.includes("no conseguimos clientes") ||
+    combined.includes("no logramos clientes") ||
+    combined.includes("no llegan clientes") ||
+    combined.includes("dificultad para conseguir clientes") ||
+    combined.includes("dificultad para adquirir clientes") ||
+    combined.includes("demanda insuficiente") ||
+    combined.includes("falta de demanda") ||
+    combined.includes("sin demanda");
 
   const retentionLanguage =
-    combined.includes("retencion") ||
-    combined.includes("abandono") ||
-    combined.includes("abandonan") ||
-    combined.includes("cancelan") ||
-    combined.includes("pierden clientes");
+    combined.includes("abandono temprano") ||
+    combined.includes("alto abandono") ||
+    combined.includes("mucho abandono") ||
+    combined.includes("clientes abandonan") ||
+    combined.includes("clientes están abandonando") ||
+    combined.includes("clientes estan abandonando") ||
+    combined.includes("perdiendo clientes") ||
+    combined.includes("pierden clientes") ||
+    combined.includes("cancelaciones han aumentado") ||
+    combined.includes("muchas cancelaciones") ||
+    combined.includes("retencion baja") ||
+    combined.includes("baja retencion") ||
+    combined.includes("retencion deficiente") ||
+    combined.includes("retencion pobre") ||
+    combined.includes("problema de retencion") ||
+    combined.includes("problemas de retencion");
 
   const productProblemLanguage =
     includesAny(
@@ -376,11 +391,21 @@ export function detectStrategicSignal(
     normalizedMessage.includes("churn aumento");
 
   const messageRetentionSignal =
-    normalizedMessage.includes("retencion") ||
-    normalizedMessage.includes("abandono") ||
-    normalizedMessage.includes("abandonan") ||
-    normalizedMessage.includes("cancelan") ||
+    normalizedMessage.includes("abandono temprano") ||
+    normalizedMessage.includes("alto abandono") ||
+    normalizedMessage.includes("mucho abandono") ||
+    normalizedMessage.includes("clientes abandonan") ||
+    normalizedMessage.includes("clientes estan abandonando") ||
+    normalizedMessage.includes("perdiendo clientes") ||
     normalizedMessage.includes("pierden clientes") ||
+    normalizedMessage.includes("cancelaciones han aumentado") ||
+    normalizedMessage.includes("muchas cancelaciones") ||
+    normalizedMessage.includes("retencion baja") ||
+    normalizedMessage.includes("baja retencion") ||
+    normalizedMessage.includes("retencion deficiente") ||
+    normalizedMessage.includes("retencion pobre") ||
+    normalizedMessage.includes("problema de retencion") ||
+    normalizedMessage.includes("problemas de retencion") ||
     (
       normalizedMessage.includes("churn") &&
       churn !== null &&
