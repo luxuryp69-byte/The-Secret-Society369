@@ -1,0 +1,84 @@
+import { promises as fs } from "fs";
+import path from "path";
+
+import { defaultMemory } from "./defaultMemory";
+import type { FounderMemory } from "./types";
+
+const MEMORY_FILE = path.join(
+  process.cwd(),
+  "data",
+  "memory.json"
+);
+
+export async function loadMemory(): Promise<FounderMemory> {
+
+  try {
+
+    const raw = await fs.readFile(
+      MEMORY_FILE,
+      "utf8"
+    );
+
+    return JSON.parse(raw);
+
+  } catch {
+
+    return structuredClone(defaultMemory);
+
+  }
+
+}
+
+export async function saveMemory(
+  memory: FounderMemory
+): Promise<void> {
+
+  try {
+
+    await fs.mkdir(
+      path.dirname(MEMORY_FILE),
+      {
+        recursive: true,
+      }
+    );
+
+    await fs.writeFile(
+      MEMORY_FILE,
+      JSON.stringify(
+        memory,
+        null,
+        2
+      )
+    );
+
+  } catch (error) {
+
+    const code =
+      error &&
+      typeof error === "object" &&
+      "code" in error
+        ? String(
+            (error as { code?: unknown }).code
+          )
+        : "";
+
+    if (
+      process.env.VERCEL === "1" &&
+      (
+        code === "EROFS" ||
+        code === "EACCES" ||
+        code === "EPERM"
+      )
+    ) {
+
+      console.warn(
+        "⚠️ Memory persistence skipped: Vercel filesystem is read-only."
+      );
+
+      return;
+    }
+
+    throw error;
+  }
+
+}

@@ -1,0 +1,52 @@
+import { promises as fs } from "fs";
+import path from "path";
+
+import { defaultMemory } from "./defaultMemory";
+import type { FounderMemory } from "./types";
+
+const MEMORY_FILE = path.join(
+  process.cwd(),
+  "data",
+  "memory.json"
+);
+
+export async function loadMemory(): Promise<FounderMemory> {
+
+  try {
+
+    const raw = await fs.readFile(
+      MEMORY_FILE,
+      "utf8"
+    );
+
+    return JSON.parse(raw);
+
+  } catch {
+
+    return structuredClone(defaultMemory);
+
+  }
+
+}
+
+export async function saveMemory(
+  memory: FounderMemory
+) {
+
+  await fs.mkdir(
+    path.dirname(MEMORY_FILE),
+    {
+      recursive: true,
+    }
+  );
+
+  await fs.writeFile(
+    MEMORY_FILE,
+    JSON.stringify(
+      memory,
+      null,
+      2
+    )
+  );
+
+}

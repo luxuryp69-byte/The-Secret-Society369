@@ -1,0 +1,48 @@
+import { extract } from "@/lib/extractor/extract";
+import { syncMemory } from "@/lib/extractor/sync";
+import { executeActions } from "@/lib/executor/execute";
+import { loadMemory } from "@/lib/memory/store";
+import { syncFounderMemoryToKernel } from "@/lib/memory/kernelBridge";
+import { shouldExtractMemory } from "@/lib/memory/shouldExtractMemory";
+
+export async function memoryAgent(
+  message: string,
+) {
+  console.log("🧠 Memory Agent");
+
+  const shouldExtract = shouldExtractMemory(message);
+
+  console.log(
+    `🧠 Memory Gate | extract=${shouldExtract}`,
+  );
+
+  if (shouldExtract) {
+    const extracted = await extract(message);
+
+    console.log("🧩 Extracted Memory");
+    console.log(extracted);
+
+    // Keep the legacy store temporarily so existing
+    // Founder OS functionality remains compatible.
+    await syncMemory(extracted);
+
+    if (
+      extracted.actions &&
+      extracted.actions.length > 0
+    ) {
+      await executeActions(extracted);
+    }
+  } else {
+    console.log(
+      "⚡ Memory extraction skipped | no persistent memory signal",
+    );
+  }
+
+  const founderMemory = await loadMemory();
+
+  // Synchronize the canonical FounderMemory into the
+  // MemoryClient owned by the Kernel.
+  await syncFounderMemoryToKernel(founderMemory);
+
+  return founderMemory;
+}

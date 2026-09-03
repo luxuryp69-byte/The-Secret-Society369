@@ -1,5 +1,16 @@
 {
   "name": "@tnf/database",
-  "version": "1.0.0",
-  "private": true
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tnf/shared": "workspace:*",
+    "@tnf/config": "workspace:*"
+  }
 }

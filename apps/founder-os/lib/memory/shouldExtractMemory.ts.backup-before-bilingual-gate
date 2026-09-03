@@ -1,0 +1,53 @@
+const PERSISTENT_MEMORY_PATTERNS = [
+  /\bmi nombre es\b/i,
+  /\bme llamo\b/i,
+  /\bsoy el fundador\b/i,
+  /\bsoy la fundadora\b/i,
+  /\bsoy fundador\b/i,
+  /\bsoy fundadora\b/i,
+  /\bnuestra empresa\b/i,
+  /\bmi empresa\b/i,
+  /\bmi startup\b/i,
+  /\bnuestra startup\b/i,
+  /\bnuestro producto\b/i,
+  /\bnuestro servicio\b/i,
+  /\bmi producto\b/i,
+  /\bmi servicio\b/i,
+  /\btrabajamos en\b/i,
+  /\bnos dedicamos a\b/i,
+  /\bla empresa se llama\b/i,
+  /\bel producto se llama\b/i,
+  /\bse llama\b/i,
+  /\bhemos decidido\b/i,
+  /\bdecidimos\b/i,
+  /\bnuestro objetivo es\b/i,
+  /\bmi objetivo es\b/i,
+  /\bqueremos construir\b/i,
+  /\bqueremos crear\b/i,
+  /\bqueremos lanzar\b/i,
+  /\bhemos lanzado\b/i,
+  /\blanzamos\b/i,
+  /\bnuestro mercado\b/i,
+  /\bnuestros clientes\b/i,
+  /\bnuestro cliente ideal\b/i,
+  /\bnuestro modelo de negocio\b/i,
+  /\bnuestro pricing\b/i,
+  /\bnuestros precios\b/i,
+  /\bnuestro equipo\b/i,
+  /\bsoy ceo\b/i,
+  /\bsoy ceo de\b/i,
+  /\bsoy director\b/i,
+  /\bsoy directora\b/i,
+];
+
+export function shouldExtractMemory(message: string): boolean {
+  const normalized = message.trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  return PERSISTENT_MEMORY_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
+  );
+}

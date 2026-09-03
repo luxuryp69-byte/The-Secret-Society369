@@ -1,0 +1,308 @@
+const OLLAMA_URL =
+  process.env.OLLAMA_URL ??
+  "http://127.0.0.1:11434/api/generate";
+
+const FAST_MODEL =
+  process.env.OLLAMA_FAST_MODEL ??
+  "gemma2:2b";
+
+const REASONING_MODEL =
+  process.env.OLLAMA_REASONING_MODEL ??
+  "llama3.1:8b";
+
+export type ModelTier =
+  | "fast"
+  | "reasoning";
+
+export type JsonSchema = {
+  type: "object" | "array" | "string" | "number" | "integer" | "boolean";
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  additionalProperties?: boolean;
+  description?: string;
+  enum?: string[];
+};
+
+export type GenerateOptions = {
+  temperature?: number;
+  num_predict?: number;
+  model?: string;
+  tier?: ModelTier;
+  keep_alive?: string | number;
+
+  /**
+   * Ollama Structured Outputs.
+   *
+   * Can be:
+   * - "json"
+   * - a JSON Schema object
+   */
+  format?: "json" | Record<string, unknown>;
+};
+
+type OllamaResponse = {
+  response?: string;
+  model?: string;
+
+  total_duration?: number;
+  load_duration?: number;
+  prompt_eval_duration?: number;
+  eval_duration?: number;
+
+  prompt_eval_count?: number;
+  eval_count?: number;
+};
+
+function getModel(
+  options: GenerateOptions,
+): string {
+  if (options.model) {
+    return options.model;
+  }
+
+  if (options.tier === "reasoning") {
+    return REASONING_MODEL;
+  }
+
+  return FAST_MODEL;
+}
+
+function nsToSeconds(
+  value?: number,
+): string {
+  if (!value) {
+    return "0.00";
+  }
+
+  return (
+    value / 1_000_000_000
+  ).toFixed(2);
+}
+
+async function generate(
+  prompt: string,
+  options: GenerateOptions = {},
+): Promise<string> {
+  const startedAt = Date.now();
+
+  const model = getModel(options);
+
+  const temperature =
+    options.temperature ?? 0.2;
+
+  const numPredict =
+    options.num_predict ?? 256;
+
+  const keepAlive =
+    options.keep_alive ?? "10m";
+
+  console.log(
+    `🤖 Ollama START | model=${model} | tier=${
+      options.tier ?? "fast"
+    } | prompt=${prompt.length} chars | max_tokens=${numPredict}`,
+  );
+
+  try {
+    const body: Record<string, unknown> = {
+      model,
+      prompt,
+      stream: false,
+      keep_alive: keepAlive,
+
+      options: {
+        temperature,
+        num_predict: numPredict,
+      },
+    };
+
+    /**
+     * Ollama Structured Outputs.
+     *
+     * This is handled by Ollama itself.
+     * No package/download is required.
+     */
+    if (options.format !== undefined) {
+      body.format = options.format;
+    }
+
+    const response = await fetch(
+      OLLAMA_URL,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText =
+        await response.text();
+
+      throw new Error(
+        `Ollama ${response.status}: ${errorText}`,
+      );
+    }
+
+    const data =
+      (await response.json()) as OllamaResponse;
+
+    const result =
+      (data.response ?? "").trim();
+
+    const elapsed =
+      (
+        (Date.now() - startedAt) /
+        1000
+      ).toFixed(2);
+
+    console.log(
+      `🤖 Ollama END | ${elapsed}s | response=${result.length} chars`,
+    );
+
+    if (
+      data.load_duration !==
+      undefined
+    ) {
+      console.log(
+        `📦 Ollama LOAD | ${nsToSeconds(
+          data.load_duration,
+        )}s`,
+      );
+    }
+
+    if (
+      data.prompt_eval_duration !==
+      undefined
+    ) {
+      console.log(
+        `📥 Ollama PROMPT | ${nsToSeconds(
+          data.prompt_eval_duration,
+        )}s`,
+      );
+    }
+
+    if (
+      data.eval_duration !==
+      undefined
+    ) {
+      console.log(
+        `🧠 Ollama EVAL | ${nsToSeconds(
+          data.eval_duration,
+        )}s`,
+      );
+    }
+
+    if (
+      data.prompt_eval_count !==
+      undefined
+    ) {
+      console.log(
+        `📊 Ollama TOKENS | prompt=${
+          data.prompt_eval_count
+        } generated=${
+          data.eval_count ?? 0
+        }`,
+      );
+    }
+
+    return result;
+  } catch (error) {
+    const elapsed =
+      (
+        (Date.now() - startedAt) /
+        1000
+      ).toFixed(2);
+
+    console.error(
+      `❌ Ollama ERROR | ${elapsed}s`,
+      error,
+    );
+
+    throw error;
+  }
+}
+
+/**
+ * Fast path.
+ *
+ * Used for:
+ * - memory extraction
+ * - routing
+ * - JSON
+ * - normal executive answers
+ */
+export async function askFast(
+  prompt: string,
+  options: GenerateOptions = {},
+): Promise<string> {
+  return generate(
+    prompt,
+    {
+      ...options,
+      tier: "fast",
+    },
+  );
+}
+
+/**
+ * Reasoning path.
+ *
+ * Used for genuinely complex
+ * strategic reasoning.
+ */
+export async function askReasoning(
+  prompt: string,
+  options: GenerateOptions = {},
+): Promise<string> {
+  return generate(
+    prompt,
+    {
+      ...options,
+      tier: "reasoning",
+    },
+  );
+}
+
+/**
+ * Backwards-compatible text API.
+ */
+export async function askText(
+  prompt: string,
+  options: GenerateOptions = {},
+): Promise<string> {
+  return generate(
+    prompt,
+    options,
+  );
+}
+
+/**
+ * Backwards-compatible JSON API.
+ *
+ * This does NOT automatically force a schema.
+ * Pass `format` when structured output
+ * is required.
+ */
+export async function askJSON(
+  prompt: string,
+  options: GenerateOptions = {},
+): Promise<string> {
+  return generate(
+    prompt,
+    {
+      ...options,
+      tier: "fast",
+    },
+  );
+}
+
+export const OLLAMA_MODELS = {
+  fast: FAST_MODEL,
+  reasoning: REASONING_MODEL,
+} as const;
