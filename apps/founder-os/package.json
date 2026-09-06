@@ -9,7 +9,8 @@
     "lint": "eslint",
     "benchmark:ceo": "tsx tests/ceo/benchmark.ts",
     "test:strategic": "vitest run tests/strategic-signals.test.ts",
-    "test:ceo": "tsx scripts/test-ceo-strategic.ts"
+    "test:ceo": "tsx scripts/test-ceo-strategic.ts",
+    "test:chat-api": "tsx scripts/test-chat-api.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.27",
