@@ -128,63 +128,59 @@ export async function syncFounderMemoryToKernel(
   const memory =
     client ?? await getKernelMemory();
 
-  await memory.episodic.storeRecord(
-    founderRecord(
-      founderMemory.founder,
+  const profileWrites = [
+    memory.episodic.storeRecord(
+      founderRecord(founderMemory.founder),
     ),
-  );
-
-  await memory.semantic.storeRecord(
-    companyRecord(
-      founderMemory.company,
+    memory.semantic.storeRecord(
+      companyRecord(founderMemory.company),
     ),
-  );
-
-  await memory.semantic.storeRecord(
-    productRecord(
-      founderMemory.product,
+    memory.semantic.storeRecord(
+      productRecord(founderMemory.product),
     ),
-  );
+  ];
 
-  for (const goal of founderMemory.goals) {
-    await memory.episodic.storeRecord(
-      goalRecord(goal),
-    );
-  }
-
-  for (
-    const decision of founderMemory.decisions
-  ) {
-    await memory.episodic.storeRecord(
-      decisionRecord(decision),
-    );
-  }
-
-  for (
-    let index = 0;
-    index < founderMemory.knowledge.length;
-    index += 1
-  ) {
-    await memory.semantic.storeRecord(
-      stringRecord(
-        "knowledge",
-        String(index),
-        founderMemory.knowledge[index],
+  const goalWrites = founderMemory.goals.map(
+    (goal) =>
+      memory.episodic.storeRecord(
+        goalRecord(goal),
       ),
-    );
-  }
+  );
 
-  for (
-    let index = 0;
-    index < founderMemory.insights.length;
-    index += 1
-  ) {
-    await memory.semantic.storeRecord(
-      stringRecord(
-        "insight",
-        String(index),
-        founderMemory.insights[index],
+  const decisionWrites = founderMemory.decisions.map(
+    (decision) =>
+      memory.episodic.storeRecord(
+        decisionRecord(decision),
       ),
-    );
-  }
+  );
+
+  const knowledgeWrites = founderMemory.knowledge.map(
+    (knowledge, index) =>
+      memory.semantic.storeRecord(
+        stringRecord(
+          "knowledge",
+          String(index),
+          knowledge,
+        ),
+      ),
+  );
+
+  const insightWrites = founderMemory.insights.map(
+    (insight, index) =>
+      memory.semantic.storeRecord(
+        stringRecord(
+          "insight",
+          String(index),
+          insight,
+        ),
+      ),
+  );
+
+  await Promise.all([
+    ...profileWrites,
+    ...goalWrites,
+    ...decisionWrites,
+    ...knowledgeWrites,
+    ...insightWrites,
+  ]);
 }
