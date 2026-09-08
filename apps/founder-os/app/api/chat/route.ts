@@ -4,11 +4,11 @@ import { answer } from "@/lib/chat/answer";
 
 const MAX_MESSAGE_LENGTH = 10_000;
 
-function badRequest(response: string) {
+function badRequest(error: string) {
   return NextResponse.json(
     {
       success: false,
-      response,
+      error,
     },
     { status: 400 },
   );
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        response: "Unable to process the chat request.",
+        error: "Unable to process the chat request.",
       },
       { status: 500 },
     );
