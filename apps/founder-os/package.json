@@ -13,7 +13,8 @@
     "test:chat-api": "tsx scripts/test-chat-api.ts",
     "test:knowledge": "tsx scripts/test-knowledge.ts",
     "test:knowledge:v2": "tsx scripts/test-knowledge-v2.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:knowledge:v3": "tsx scripts/test-knowledge-v3.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.27",

@@ -22,6 +22,13 @@ export interface KnowledgeSource {
   type: KnowledgeSourceType;
 }
 
+export interface KnowledgeProvenance {
+  sourceUrl: string;
+  fetchedAt: string;
+  publishedAt?: string;
+  verifiedAt?: string;
+}
+
 export interface KnowledgeItem {
   id: string;
   claim: string;
@@ -34,6 +41,8 @@ export interface KnowledgeItem {
   confidence: number;
   verificationStatus: KnowledgeVerificationStatus;
   tags: string[];
+  provenance?: KnowledgeProvenance;
+  contentHash?: string;
   createdAt: string;
   updatedAt: string;
 }
