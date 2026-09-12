@@ -1,4 +1,5 @@
 import type { KnowledgeItem } from "../types";
+import { detectConflicts } from "../conflicts/detectConflict";
 import { getSourceAuthority } from "./authority";
 import { calculateCorroboration } from "./corroboration";
 import { calculateVerificationStatus } from "./status";
@@ -8,6 +9,7 @@ export interface VerificationResult {
   authorityScore: number;
   corroborated: boolean;
   supportingSources: number;
+  conflictingSources: number;
   reason: string;
 }
 
@@ -24,6 +26,7 @@ export function verifyClaim(
       authorityScore,
       corroborated: false,
       supportingSources: 0,
+      conflictingSources: 0,
       reason: "The claim was explicitly rejected.",
     };
   }
@@ -34,6 +37,7 @@ export function verifyClaim(
       authorityScore,
       corroborated: false,
       supportingSources: 0,
+      conflictingSources: 0,
       reason: "The claim is explicitly disputed.",
     };
   }
@@ -46,11 +50,33 @@ export function verifyClaim(
       authorityScore,
       corroborated: false,
       supportingSources: 0,
+      conflictingSources: 0,
       reason: "The claim has passed its expiration date.",
     };
   }
 
-  const corroboration = calculateCorroboration(item, existingItems);
+  const conflicts = detectConflicts(
+    item,
+    existingItems,
+  );
+
+  if (conflicts.hasConflict) {
+    return {
+      status: "DISPUTED",
+      authorityScore,
+      corroborated: false,
+      supportingSources: 0,
+      conflictingSources: conflicts.conflicts.length,
+      reason: conflicts.conflicts
+        .map((conflict) => conflict.reason)
+        .join(" "),
+    };
+  }
+
+  const corroboration = calculateCorroboration(
+    item,
+    existingItems,
+  );
 
   if (
     authorityScore >= 90 &&
@@ -62,18 +88,24 @@ export function verifyClaim(
       authorityScore,
       corroborated: true,
       supportingSources: corroboration.supportingSources,
+      conflictingSources: 0,
       reason:
         "High-authority source, sufficient confidence, and corroborating evidence.",
     };
   }
 
-  if (authorityScore >= 90 && item.confidence >= 85) {
+  if (
+    authorityScore >= 90 &&
+    item.confidence >= 85
+  ) {
     return {
       status: "VERIFIED",
       authorityScore,
       corroborated: false,
       supportingSources: 0,
-      reason: "High-authority source with high confidence.",
+      conflictingSources: 0,
+      reason:
+        "High-authority source with high confidence.",
     };
   }
 
@@ -82,6 +114,8 @@ export function verifyClaim(
     authorityScore,
     corroborated: corroboration.corroborated,
     supportingSources: corroboration.supportingSources,
-    reason: "Additional evidence is required before verification.",
+    conflictingSources: 0,
+    reason:
+      "Additional evidence is required before verification.",
   };
 }
