@@ -18,7 +18,8 @@ export function verifyClaim(
   existingItems: KnowledgeItem[],
   now = new Date(),
 ): VerificationResult {
-  const authorityScore = getSourceAuthority(item.source.type);
+  const authorityScore =
+    getSourceAuthority(item.source.type);
 
   if (item.verificationStatus === "REJECTED") {
     return {
@@ -27,7 +28,8 @@ export function verifyClaim(
       corroborated: false,
       supportingSources: 0,
       conflictingSources: 0,
-      reason: "The claim was explicitly rejected.",
+      reason:
+        "The claim was explicitly rejected.",
     };
   }
 
@@ -38,11 +40,13 @@ export function verifyClaim(
       corroborated: false,
       supportingSources: 0,
       conflictingSources: 0,
-      reason: "The claim is explicitly disputed.",
+      reason:
+        "The claim is explicitly disputed.",
     };
   }
 
-  const freshnessStatus = calculateVerificationStatus(item, now);
+  const freshnessStatus =
+    calculateVerificationStatus(item, now);
 
   if (freshnessStatus === "STALE") {
     return {
@@ -51,7 +55,8 @@ export function verifyClaim(
       corroborated: false,
       supportingSources: 0,
       conflictingSources: 0,
-      reason: "The claim has passed its expiration date.",
+      reason:
+        "The claim has passed its expiration date.",
     };
   }
 
@@ -66,17 +71,19 @@ export function verifyClaim(
       authorityScore,
       corroborated: false,
       supportingSources: 0,
-      conflictingSources: conflicts.conflicts.length,
+      conflictingSources:
+        conflicts.conflicts.length,
       reason: conflicts.conflicts
         .map((conflict) => conflict.reason)
         .join(" "),
     };
   }
 
-  const corroboration = calculateCorroboration(
-    item,
-    existingItems,
-  );
+  const corroboration =
+    calculateCorroboration(
+      item,
+      existingItems,
+    );
 
   if (
     authorityScore >= 90 &&
@@ -87,7 +94,8 @@ export function verifyClaim(
       status: "VERIFIED",
       authorityScore,
       corroborated: true,
-      supportingSources: corroboration.supportingSources,
+      supportingSources:
+        corroboration.supportingSources,
       conflictingSources: 0,
       reason:
         "High-authority source, sufficient confidence, and corroborating evidence.",
@@ -112,8 +120,10 @@ export function verifyClaim(
   return {
     status: "UNVERIFIED",
     authorityScore,
-    corroborated: corroboration.corroborated,
-    supportingSources: corroboration.supportingSources,
+    corroborated:
+      corroboration.corroborated,
+    supportingSources:
+      corroboration.supportingSources,
     conflictingSources: 0,
     reason:
       "Additional evidence is required before verification.",
