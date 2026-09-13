@@ -1,20 +1,39 @@
 import type { KnowledgeItem } from "../types";
 import { LocalKnowledgeConflictRepository } from "../conflicts/conflictRepository";
-import { verifyClaim, type VerificationResult } from "./verifyClaim";
+import {
+  verifyClaim,
+  type VerificationResult,
+} from "./verifyClaim";
+import {
+  buildVerificationEvidence,
+  type VerificationEvidenceSummary,
+} from "./verificationEvidence";
+import {
+  createVerificationDecision,
+  type VerificationDecision,
+} from "./verificationDecision";
 
 export interface VerificationOrchestratorOptions {
   conflictRepository?: LocalKnowledgeConflictRepository;
   now?: Date;
 }
 
+export interface ExplainableVerificationResult
+  extends VerificationResult {
+  decision: VerificationDecision;
+  evidence: VerificationEvidenceSummary;
+}
+
 export async function verifyKnowledgeItem(
   item: KnowledgeItem,
   existingItems: KnowledgeItem[],
   options: VerificationOrchestratorOptions = {},
-): Promise<VerificationResult> {
+): Promise<ExplainableVerificationResult> {
   const repository =
     options.conflictRepository ??
     new LocalKnowledgeConflictRepository();
+
+  const now = options.now ?? new Date();
 
   const activeConflicts = (
     await repository.listByItem(item.id)
@@ -25,16 +44,15 @@ export async function verifyKnowledgeItem(
   );
 
   if (activeConflicts.length > 0) {
-    const authorityScore =
-      getAuthorityScoreFromVerification(
-        item,
-        existingItems,
-        options.now,
-      );
+    const normalVerification = verifyClaim(
+      item,
+      existingItems,
+      now,
+    );
 
-    return {
+    const verification: VerificationResult = {
       status: "DISPUTED",
-      authorityScore,
+      authorityScore: normalVerification.authorityScore,
       corroborated: false,
       supportingSources: 0,
       conflictingSources: activeConflicts.length,
@@ -42,25 +60,40 @@ export async function verifyKnowledgeItem(
         .map((conflict) => conflict.reason)
         .join(" "),
     };
+
+    return buildResult(item, verification, existingItems, now);
   }
 
-  return verifyClaim(
-    item,
-    existingItems,
-    options.now,
-  );
-}
-
-function getAuthorityScoreFromVerification(
-  item: KnowledgeItem,
-  existingItems: KnowledgeItem[],
-  now?: Date,
-): number {
-  const result = verifyClaim(
+  const verification = verifyClaim(
     item,
     existingItems,
     now,
   );
 
-  return result.authorityScore;
+  return buildResult(item, verification, existingItems, now);
+}
+
+function buildResult(
+  item: KnowledgeItem,
+  verification: VerificationResult,
+  existingItems: KnowledgeItem[],
+  now: Date,
+): ExplainableVerificationResult {
+  const evidence = buildVerificationEvidence(
+    item,
+    existingItems,
+    verification,
+    now,
+  );
+
+  const decision = createVerificationDecision(
+    verification.status,
+    evidence,
+  );
+
+  return {
+    ...verification,
+    decision,
+    evidence,
+  };
 }
