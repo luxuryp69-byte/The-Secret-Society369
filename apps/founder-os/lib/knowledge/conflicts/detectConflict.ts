@@ -16,9 +16,14 @@ function normalizeText(value: string): string {
 }
 
 function normalizeUrl(value: string): string {
-  try {
-    const url = new URL(value);
+  const markdownMatch = value.match(
+    /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/,
+  );
 
+  const rawValue = markdownMatch?.[2] ?? value;
+
+  try {
+    const url = new URL(rawValue);
     url.hash = "";
 
     if (
@@ -30,7 +35,7 @@ function normalizeUrl(value: string): string {
 
     return url.toString().replace(/\/$/, "").toLowerCase();
   } catch {
-    return value.trim().toLowerCase().replace(/\/$/, "");
+    return rawValue.trim().toLowerCase().replace(/\/$/, "");
   }
 }
 
@@ -84,25 +89,40 @@ function hasExplicitNegation(value: string): boolean {
 }
 
 /**
- * Normalizes common English negative constructions so that:
- *
- * "supports" vs "does not support"
- * "is available" vs "is not available"
- * "works" vs "doesn't work"
- *
- * can be compared as the same underlying proposition.
+ * Normalizes common English negative constructions so that
+ * positive and negative versions of the same proposition
+ * resolve to the same underlying claim.
  */
 function normalizeNegatedClaim(value: string): string {
   let result = normalizeText(value);
 
   const replacements: Array<[RegExp, string]> = [
+    // do/does/did + not + verb
+    [/\bdoes\s+not\s+provide\b/g, "provides"],
+    [/\bdo\s+not\s+provide\b/g, "provide"],
+    [/\bdid\s+not\s+provide\b/g, "provided"],
+
     [/\bdoes\s+not\s+support\b/g, "supports"],
     [/\bdo\s+not\s+support\b/g, "support"],
     [/\bdid\s+not\s+support\b/g, "supported"],
+
+    [/\bdoes\s+not\s+work\b/g, "works"],
+    [/\bdo\s+not\s+work\b/g, "work"],
+    [/\bdid\s+not\s+work\b/g, "worked"],
+
+    [/\bdoesn't\s+provide\b/g, "provides"],
+    [/\bdon't\s+provide\b/g, "provide"],
+    [/\bdidn't\s+provide\b/g, "provided"],
+
     [/\bdoesn't\s+support\b/g, "supports"],
     [/\bdon't\s+support\b/g, "support"],
     [/\bdidn't\s+support\b/g, "supported"],
 
+    [/\bdoesn't\s+work\b/g, "works"],
+    [/\bdon't\s+work\b/g, "work"],
+    [/\bdidn't\s+work\b/g, "worked"],
+
+    // be + not + adjective
     [/\bis\s+not\s+available\b/g, "is available"],
     [/\bisn't\s+available\b/g, "is available"],
 
@@ -112,12 +132,19 @@ function normalizeNegatedClaim(value: string): string {
     [/\bis\s+not\s+supported\b/g, "is supported"],
     [/\bisn't\s+supported\b/g, "is supported"],
 
-    [/\bdoes\s+not\s+work\b/g, "works"],
-    [/\bdoesn't\s+work\b/g, "works"],
+    [/\bis\s+not\s+active\b/g, "is active"],
+    [/\bisn't\s+active\b/g, "is active"],
 
+    [/\bis\s+not\s+open\b/g, "is open"],
+    [/\bisn't\s+open\b/g, "is open"],
+
+    // modal negatives
     [/\bcan\s+not\b/g, "can"],
     [/\bcannot\b/g, "can"],
     [/\bcan't\b/g, "can"],
+
+    [/\bwill\s+not\b/g, "will"],
+    [/\bwon't\b/g, "will"],
   ];
 
   for (const [pattern, replacement] of replacements) {

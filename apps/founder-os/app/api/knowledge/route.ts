@@ -4,6 +4,16 @@ import {
   listKnowledge,
   saveKnowledge,
 } from "@/lib/knowledge/service";
+import {
+  persistDetectedConflicts,
+} from "@/lib/knowledge/conflicts/conflictService";
+import {
+  buildTrustedAnswer,
+} from "@/lib/knowledge/answers/trustedAnswerBuilder";
+import {
+  verifyKnowledgeItem,
+} from "@/lib/knowledge/verification/verificationOrchestrator";
+
 import type { KnowledgeItem } from "@/lib/knowledge/types";
 
 const MAX_CLAIM_LENGTH = 10_000;
@@ -66,7 +76,10 @@ export async function GET() {
       items,
     });
   } catch (error) {
-    console.error("❌ Knowledge request failed", error);
+    console.error(
+      "❌ Knowledge request failed",
+      error,
+    );
 
     return NextResponse.json(
       {
@@ -83,11 +96,15 @@ export async function POST(req: NextRequest) {
     const body: unknown = await req.json();
 
     if (!isValidKnowledgeItem(body)) {
-      return badRequest("Invalid knowledge item.");
+      return badRequest(
+        "Invalid knowledge item.",
+      );
     }
 
     if (!body.claim.trim()) {
-      return badRequest("Claim is required.");
+      return badRequest(
+        "Claim is required.",
+      );
     }
 
     if (body.claim.length > MAX_CLAIM_LENGTH) {
@@ -105,22 +122,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const existingItems = await listKnowledge();
+
     await saveKnowledge(body);
+
+    await persistDetectedConflicts(
+      body,
+      existingItems,
+    );
+
+    const verification =
+      await verifyKnowledgeItem(
+        body,
+        existingItems,
+      );
+
+    const trustedAnswer =
+      buildTrustedAnswer({
+        answer: body.claim,
+        item: body,
+        verification,
+      });
 
     return NextResponse.json(
       {
         success: true,
         item: body,
+        verification,
+        trustedAnswer,
       },
       { status: 201 },
     );
   } catch (error) {
-    console.error("❌ Knowledge write failed", error);
+    console.error(
+      "❌ Knowledge write failed",
+      error,
+    );
 
     return NextResponse.json(
       {
         success: false,
-        response: "Unable to save knowledge.",
+        response:
+          "Unable to save knowledge.",
       },
       { status: 500 },
     );

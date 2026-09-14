@@ -4,3 +4,6 @@
 
 # Local environment backups
 .env.local.backup-*
+
+# Founder OS local knowledge storage
+data/
