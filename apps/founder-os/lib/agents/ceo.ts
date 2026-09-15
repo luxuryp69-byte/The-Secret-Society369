@@ -1,3 +1,4 @@
+import { KnowledgeDecisionService } from "./knowledge/decision/knowledgeDecisionService";
 import { askFast } from "../ai/ollama";
 
 type CEOOutput = {
@@ -453,6 +454,34 @@ function includesAny(
   );
 }
 
+function isAgentKnowledgeContext(
+  value: unknown,
+): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return false;
+  }
+
+  const context =
+    value as Record<string, unknown>;
+
+  return (
+    typeof context.query === "string" &&
+    typeof context.availability === "string" &&
+    typeof context.status === "string" &&
+    typeof context.canUseAsTrustedContext === "boolean" &&
+    typeof context.confidence === "number" &&
+    (
+      context.answer === null ||
+      typeof context.answer === "string"
+    ) &&
+    Array.isArray(context.sources) &&
+    Array.isArray(context.evidence)
+  );
+}
+
 export function detectStrategicSignal(
   message: string,
   memory: unknown,
@@ -460,15 +489,28 @@ export function detectStrategicSignal(
 ): StrategicSignal {
   const normalizedMessage = normalize(message);
 
+  const knowledgeDecision =
+    isAgentKnowledgeContext(knowledge)
+      ? new KnowledgeDecisionService().createContext(
+          knowledge,
+        )
+      : null;
+
   const trustedKnowledge =
-    formatTrustedKnowledgeContext(
-      knowledge,
-    );
+    knowledgeDecision?.classification === "FACT"
+      ? knowledgeDecision.facts.join("\n")
+      : "";
+
+  const legacyKnowledge =
+    knowledgeDecision === null
+      ? formatContext(knowledge)
+      : "";
 
   const combined = normalize(
     [
       message,
       formatContext(memory),
+      legacyKnowledge,
       trustedKnowledge,
     ].join("\n"),
   );
@@ -505,6 +547,9 @@ export function detectStrategicSignal(
     combined.includes("no logramos clientes") ||
     combined.includes("no llegan clientes") ||
     combined.includes("dificultad para conseguir clientes") ||
+    /dificultades? para (?:conseguir|adquirir) (?:nuevos? )?clientes/.test(
+      combined,
+    ) ||
     combined.includes("dificultad para adquirir clientes") ||
     combined.includes("demanda insuficiente") ||
     combined.includes("falta de demanda") ||
@@ -948,6 +993,22 @@ export function buildCEOUserPrompt(
     formatTrustedKnowledgeEvidence(knowledge),
   );
 
+  const knowledgeDecision =
+    new KnowledgeDecisionService().createContext(
+      knowledge,
+    );
+
+  const knowledgeDecisionContext =
+    truncateContext(
+      [
+        `classification=${knowledgeDecision.classification}`,
+        `status=${knowledgeDecision.status}`,
+        `confidence=${knowledgeDecision.confidence}`,
+        `facts=${knowledgeDecision.facts.join(" | ") || "none"}`,
+        `unknowns=${knowledgeDecision.unknowns.join(" | ") || "none"}`,
+      ].join("\n"),
+    );
+
   return `You are the CEO and strategic decision-maker of Founder OS.
 
 Make ONE high-leverage executive decision.
@@ -982,6 +1043,10 @@ ${knowledgeSources}
 KNOWLEDGE EVIDENCE
 
 ${knowledgeEvidence}
+
+KNOWLEDGE DECISION CONTEXT
+
+${knowledgeDecisionContext}
 
 FOUNDER REQUEST
 
