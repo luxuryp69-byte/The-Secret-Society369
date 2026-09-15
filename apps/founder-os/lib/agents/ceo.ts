@@ -61,6 +61,12 @@ type CEOContext = {
   knowledge?: unknown;
 };
 
+type TrustAwareKnowledgeContext = {
+  canUseAsTrustedContext?: boolean;
+  availability?: string;
+  answer?: unknown;
+};
+
 type StrategicConstraint =
   | "product"
   | "retention"
@@ -159,6 +165,33 @@ function formatContext(value: unknown): string {
   }
 }
 
+function formatTrustedKnowledgeContext(
+  value: unknown,
+): string {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return "No trusted knowledge context available.";
+  }
+
+  const context =
+    value as TrustAwareKnowledgeContext;
+
+  if (context.canUseAsTrustedContext !== true) {
+    return "No trusted knowledge context available.";
+  }
+
+  if (
+    typeof context.answer !== "string" ||
+    !context.answer.trim()
+  ) {
+    return "No trusted knowledge context available.";
+  }
+
+  return context.answer.trim();
+}
+
 function truncateContext(value: string): string {
   if (value.length <= MAX_CONTEXT_CHARS) {
     return value;
@@ -227,11 +260,16 @@ export function detectStrategicSignal(
 ): StrategicSignal {
   const normalizedMessage = normalize(message);
 
+  const trustedKnowledge =
+    formatTrustedKnowledgeContext(
+      knowledge,
+    );
+
   const combined = normalize(
     [
       message,
       formatContext(memory),
-      formatContext(knowledge),
+      trustedKnowledge,
     ].join("\n"),
   );
 
