@@ -61,10 +61,34 @@ type CEOContext = {
   knowledge?: unknown;
 };
 
+type TrustAwareKnowledgeSource = {
+  title?: unknown;
+  publisher?: unknown;
+  url?: unknown;
+  type?: unknown;
+  publishedAt?: unknown;
+  fetchedAt?: unknown;
+  verifiedAt?: unknown;
+};
+
+type TrustAwareKnowledgeEvidence = {
+  itemId?: unknown;
+  claim?: unknown;
+  status?: unknown;
+  confidence?: unknown;
+  authorityScore?: unknown;
+  corroborated?: unknown;
+  supportingSources?: unknown;
+  conflictingSources?: unknown;
+  reason?: unknown;
+};
+
 type TrustAwareKnowledgeContext = {
   canUseAsTrustedContext?: boolean;
   availability?: string;
   answer?: unknown;
+  sources?: unknown;
+  evidence?: unknown;
 };
 
 type StrategicConstraint =
@@ -75,7 +99,7 @@ type StrategicConstraint =
   | "execution"
   | "unknown";
 
-type StrategicSignal = {
+export type StrategicSignal = {
   constraint: StrategicConstraint;
   evidence: string[];
   confidence: number;
@@ -190,6 +214,182 @@ function formatTrustedKnowledgeContext(
   }
 
   return context.answer.trim();
+}
+
+function formatTrustedKnowledgeSources(
+  value: unknown,
+): string {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return "No trusted knowledge sources available.";
+  }
+
+  const context =
+    value as TrustAwareKnowledgeContext;
+
+  if (context.canUseAsTrustedContext !== true) {
+    return "No trusted knowledge sources available.";
+  }
+
+  if (!Array.isArray(context.sources) || context.sources.length === 0) {
+    return "No trusted knowledge sources available.";
+  }
+
+  const sources = context.sources
+    .filter(
+      (source): source is TrustAwareKnowledgeSource =>
+        typeof source === "object" &&
+        source !== null,
+    )
+    .map((source) => {
+      const title =
+        typeof source.title === "string"
+          ? source.title.trim()
+          : "";
+
+      const publisher =
+        typeof source.publisher === "string"
+          ? source.publisher.trim()
+          : "";
+
+      const url =
+        typeof source.url === "string"
+          ? source.url.trim()
+          : "";
+
+      const type =
+        typeof source.type === "string"
+          ? source.type.trim()
+          : "";
+
+      const publishedAt =
+        typeof source.publishedAt === "string"
+          ? source.publishedAt.trim()
+          : "";
+
+      const fetchedAt =
+        typeof source.fetchedAt === "string"
+          ? source.fetchedAt.trim()
+          : "";
+
+      const verifiedAt =
+        typeof source.verifiedAt === "string"
+          ? source.verifiedAt.trim()
+          : "";
+
+      const parts = [
+        title && `title=${title}`,
+        publisher && `publisher=${publisher}`,
+        type && `type=${type}`,
+        url && `url=${url}`,
+        publishedAt && `publishedAt=${publishedAt}`,
+        fetchedAt && `fetchedAt=${fetchedAt}`,
+        verifiedAt && `verifiedAt=${verifiedAt}`,
+      ].filter(Boolean);
+
+      return parts.length > 0
+        ? `- ${parts.join(" | ")}`
+        : null;
+    })
+    .filter((source): source is string => source !== null);
+
+  return sources.length > 0
+    ? sources.join("\n")
+    : "No trusted knowledge sources available.";
+}
+
+function formatTrustedKnowledgeEvidence(
+  value: unknown,
+): string {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return "No trusted knowledge evidence available.";
+  }
+
+  const context =
+    value as TrustAwareKnowledgeContext;
+
+  if (context.canUseAsTrustedContext !== true) {
+    return "No trusted knowledge evidence available.";
+  }
+
+  if (!Array.isArray(context.evidence) || context.evidence.length === 0) {
+    return "No trusted knowledge evidence available.";
+  }
+
+  const evidence = context.evidence
+    .filter(
+      (item): item is TrustAwareKnowledgeEvidence =>
+        typeof item === "object" &&
+        item !== null,
+    )
+    .map((item) => {
+      const claim =
+        typeof item.claim === "string"
+          ? item.claim.trim()
+          : "";
+
+      const status =
+        typeof item.status === "string"
+          ? item.status.trim()
+          : "";
+
+      const confidence =
+        typeof item.confidence === "number"
+          ? String(item.confidence)
+          : "";
+
+      const authorityScore =
+        typeof item.authorityScore === "number"
+          ? String(item.authorityScore)
+          : "";
+
+      const corroborated =
+        typeof item.corroborated === "boolean"
+          ? String(item.corroborated)
+          : "";
+
+      const supportingSources =
+        typeof item.supportingSources === "number"
+          ? String(item.supportingSources)
+          : "";
+
+      const conflictingSources =
+        typeof item.conflictingSources === "number"
+          ? String(item.conflictingSources)
+          : "";
+
+      const reason =
+        typeof item.reason === "string"
+          ? item.reason.trim()
+          : "";
+
+      const parts = [
+        claim && `claim=${claim}`,
+        status && `status=${status}`,
+        confidence && `confidence=${confidence}`,
+        authorityScore && `authorityScore=${authorityScore}`,
+        corroborated && `corroborated=${corroborated}`,
+        supportingSources &&
+          `supportingSources=${supportingSources}`,
+        conflictingSources &&
+          `conflictingSources=${conflictingSources}`,
+        reason && `reason=${reason}`,
+      ].filter(Boolean);
+
+      return parts.length > 0
+        ? `- ${parts.join(" | ")}`
+        : null;
+    })
+    .filter((item): item is string => item !== null);
+
+  return evidence.length > 0
+    ? evidence.join("\n")
+    : "No trusted knowledge evidence available.";
 }
 
 function truncateContext(value: string): string {
@@ -740,6 +940,14 @@ export function buildCEOUserPrompt(
     formatTrustedKnowledgeContext(knowledge),
   );
 
+  const knowledgeSources = truncateContext(
+    formatTrustedKnowledgeSources(knowledge),
+  );
+
+  const knowledgeEvidence = truncateContext(
+    formatTrustedKnowledgeEvidence(knowledge),
+  );
+
   return `You are the CEO and strategic decision-maker of Founder OS.
 
 Make ONE high-leverage executive decision.
@@ -766,6 +974,14 @@ ${memoryContext}
 RELEVANT KNOWLEDGE
 
 ${knowledgeContext}
+
+KNOWLEDGE SOURCES
+
+${knowledgeSources}
+
+KNOWLEDGE EVIDENCE
+
+${knowledgeEvidence}
 
 FOUNDER REQUEST
 
