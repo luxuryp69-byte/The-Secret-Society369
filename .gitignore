@@ -21,3 +21,6 @@ coverage
 *.log
 # Vercel
 .vercel/
+
+# Local runtime data
+data/
