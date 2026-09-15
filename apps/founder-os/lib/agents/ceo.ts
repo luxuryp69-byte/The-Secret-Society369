@@ -722,7 +722,7 @@ function strategicInstruction(
   }
 }
 
-function buildCEOUserPrompt(
+export function buildCEOUserPrompt(
   message: string,
   memory: unknown,
   knowledge: unknown,
@@ -737,7 +737,7 @@ function buildCEOUserPrompt(
   );
 
   const knowledgeContext = truncateContext(
-    formatContext(knowledge),
+    formatTrustedKnowledgeContext(knowledge),
   );
 
   return `You are the CEO and strategic decision-maker of Founder OS.
