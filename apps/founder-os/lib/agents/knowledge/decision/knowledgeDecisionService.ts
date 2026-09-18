@@ -6,6 +6,8 @@ import type {
 import type {
   KnowledgeDecisionEvidence,
   AgentKnowledgeDecisionContext,
+  KnowledgeDecisionLLMMetadata,
+  KnowledgeDecisionValidationResult,
 } from "./types";
 
 function isObject(
@@ -19,59 +21,79 @@ function isObject(
 
 function toEvidence(
   value: unknown,
+  candidates: AgentKnowledgeContext["candidates"] = [],
 ): KnowledgeDecisionEvidence[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
+  const sourceUrlsByItemId = new Map<string, string[]>();
+
+  for (const candidate of candidates) {
+    const itemId = candidate.item.id.trim();
+    const sourceUrl = candidate.item.source.url.trim();
+
+    if (!itemId || !sourceUrl) {
+      continue;
+    }
+
+    sourceUrlsByItemId.set(itemId, [sourceUrl]);
+  }
+
   return value
     .filter(isObject)
-    .map((item) => ({
-      itemId:
+    .map((item) => {
+      const itemId =
         typeof item.itemId === "string"
-          ? item.itemId
-          : "",
+          ? item.itemId.trim()
+          : "";
 
-      claim:
-        typeof item.claim === "string"
-          ? item.claim
-          : "",
+      const sourceUrls =
+        Array.isArray(item.sourceUrls)
+          ? item.sourceUrls.filter(
+              (sourceUrl): sourceUrl is string =>
+                typeof sourceUrl === "string" &&
+                sourceUrl.trim() !== "",
+            ).map((sourceUrl) => sourceUrl.trim())
+          : sourceUrlsByItemId.get(itemId) ?? [];
 
-      status:
-        typeof item.status === "string"
-          ? item.status as KnowledgeDecisionEvidence["status"]
-          : "UNVERIFIED",
-
-      confidence:
-        typeof item.confidence === "number"
-          ? item.confidence
-          : 0,
-
-      authorityScore:
-        typeof item.authorityScore === "number"
-          ? item.authorityScore
-          : 0,
-
-      corroborated:
-        typeof item.corroborated === "boolean"
-          ? item.corroborated
-          : false,
-
-      supportingSources:
-        typeof item.supportingSources === "number"
-          ? item.supportingSources
-          : 0,
-
-      conflictingSources:
-        typeof item.conflictingSources === "number"
-          ? item.conflictingSources
-          : 0,
-
-      reason:
-        typeof item.reason === "string"
-          ? item.reason
-          : "",
-    }))
+      return {
+        itemId,
+        claim:
+          typeof item.claim === "string"
+            ? item.claim
+            : "",
+        status:
+          typeof item.status === "string"
+            ? item.status as KnowledgeDecisionEvidence["status"]
+            : "UNVERIFIED",
+        ...(sourceUrls.length > 0 ? { sourceUrls } : {}),
+        confidence:
+          typeof item.confidence === "number"
+            ? item.confidence
+            : 0,
+        authorityScore:
+          typeof item.authorityScore === "number"
+            ? item.authorityScore
+            : 0,
+        corroborated:
+          typeof item.corroborated === "boolean"
+            ? item.corroborated
+            : false,
+        supportingSources:
+          typeof item.supportingSources === "number"
+            ? item.supportingSources
+            : 0,
+        conflictingSources:
+          typeof item.conflictingSources === "number"
+            ? item.conflictingSources
+            : 0,
+        reason:
+          typeof item.reason === "string"
+            ? item.reason
+            : "",
+      };
+    })
     .filter(
       (item) =>
         item.itemId.trim() !== "" ||
@@ -147,6 +169,53 @@ function toWarnings(
   );
 }
 
+function normalizeClaim(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function claimsMatch(
+  left: string,
+  right: string,
+): boolean {
+  const a = normalizeClaim(left);
+  const b = normalizeClaim(right);
+
+  return (
+    a.length > 0 &&
+    b.length > 0 &&
+    a === b
+  );
+}
+
+function normalizeSourceUrl(value: string): string {
+  return value
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function isVerifiedDecisionContext(
+  context: AgentKnowledgeDecisionContext,
+): boolean {
+  return (
+    context.availability === "AVAILABLE" &&
+    context.status === "VERIFIED" &&
+    context.classification === "FACT" &&
+    context.canUseAsTrustedContext &&
+    context.answer !== null &&
+    context.sources.length > 0 &&
+    context.evidence.length > 0 &&
+    context.evidence.every(
+      (item) => item.status === "VERIFIED",
+    )
+  );
+}
+
 export class KnowledgeDecisionService {
   createContext(
     value: unknown,
@@ -196,7 +265,10 @@ export class KnowledgeDecisionService {
       toSources(context.sources);
 
     const evidence =
-      toEvidence(context.evidence);
+      toEvidence(
+        context.evidence,
+        context.candidates ?? [],
+      );
 
     const warnings =
       toWarnings(context.warnings);
@@ -218,6 +290,7 @@ export class KnowledgeDecisionService {
         assumptions: [],
         unknowns: [],
         confidence,
+        knowledgeConfidence: confidence,
         sources,
         evidence,
         warnings,
@@ -285,6 +358,279 @@ export class KnowledgeDecisionService {
     );
   }
 
+  validateLLMDecision(
+    context: AgentKnowledgeDecisionContext,
+    metadata?: KnowledgeDecisionLLMMetadata,
+  ): KnowledgeDecisionValidationResult {
+    const verifiedContext =
+      isVerifiedDecisionContext(context);
+
+    if (metadata === undefined) {
+      if (!verifiedContext) {
+        return {
+          valid: false,
+          classification: context.classification,
+          reason:
+            "Non-FACT knowledge requires explicit LLM classification metadata.",
+        };
+      }
+
+      return {
+        valid: true,
+        classification: "FACT",
+        reason:
+          "Legacy CEO output is accepted because the Knowledge Layer supplied a verified FACT context.",
+      };
+    }
+
+    const classification =
+      metadata.classification ??
+      context.classification;
+
+    if (
+      context.classification !== "FACT" &&
+      metadata.classification === undefined
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "LLM output must classify non-trusted knowledge explicitly.",
+      };
+    }
+
+    if (
+      metadata.knowledgeConfidence !== undefined &&
+      metadata.knowledgeConfidence !==
+        context.knowledgeConfidence
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "LLM knowledgeConfidence does not match the Knowledge Layer confidence.",
+      };
+    }
+
+    if (
+      metadata.decisionConfidence !== undefined &&
+      (
+        !Number.isFinite(metadata.decisionConfidence) ||
+        metadata.decisionConfidence < 0 ||
+        metadata.decisionConfidence > 100
+      )
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "LLM decisionConfidence must be between 0 and 100.",
+      };
+    }
+
+    const evidenceById = new Map(
+      context.evidence.map((item) => [
+        item.itemId,
+        item,
+      ]),
+    );
+
+    const sourceUrls = new Set(
+      context.sources.map((source) =>
+        normalizeSourceUrl(source.url),
+      ),
+    );
+
+    if (metadata.sources !== undefined) {
+      for (const sourceUrl of metadata.sources) {
+        if (
+          !sourceUrls.has(
+            normalizeSourceUrl(sourceUrl),
+          )
+        ) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM cited a source URL absent from the Knowledge Layer context.",
+          };
+        }
+      }
+    }
+
+    if (metadata.evidence !== undefined) {
+      if (metadata.evidence.length === 0) {
+        return {
+          valid: false,
+          classification,
+          reason:
+            "LLM supplied an empty evidence list for a grounded decision.",
+        };
+      }
+
+      for (const citation of metadata.evidence) {
+        const evidence = evidenceById.get(
+          citation.itemId,
+        );
+
+        if (!evidence) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM cited an evidence item absent from the Knowledge Layer context.",
+          };
+        }
+
+        if (
+          citation.claim === undefined ||
+          citation.sourceUrl === undefined ||
+          citation.status === undefined
+        ) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM evidence citations must include itemId, claim, source URL, and status.",
+          };
+        }
+
+        if (!claimsMatch(citation.claim, evidence.claim)) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM cited a claim that is not backed by the Knowledge Layer evidence.",
+          };
+        }
+
+        if (citation.status !== evidence.status) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM evidence status does not match the verified Knowledge Layer status.",
+          };
+        }
+
+        if (
+          citation.confidence !== undefined &&
+          citation.confidence !== evidence.confidence
+        ) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM evidence confidence does not match the Knowledge Layer confidence.",
+          };
+        }
+
+        const evidenceSourceUrls = new Set(
+          (evidence.sourceUrls ?? []).map(
+            normalizeSourceUrl,
+          ),
+        );
+
+        if (
+          !evidenceSourceUrls.has(
+            normalizeSourceUrl(citation.sourceUrl),
+          )
+        ) {
+          return {
+            valid: false,
+            classification,
+            reason:
+              "LLM cited a source URL that does not belong to the cited Knowledge Layer evidence item.",
+          };
+        }
+      }
+    }
+
+    const verifiedClaims = context.evidence
+      .filter((item) => item.status === "VERIFIED")
+      .map((item) => item.claim);
+
+    if (
+      context.classification !== "FACT" &&
+      metadata.facts !== undefined &&
+      metadata.facts.length > 0
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "Non-FACT decisions cannot assert Knowledge Layer facts.",
+      };
+    }
+
+    if (
+      metadata.facts !== undefined &&
+      metadata.facts.some(
+        (fact) =>
+          !verifiedClaims.some((claim) =>
+            claimsMatch(fact, claim),
+          ),
+      )
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "LLM presented a fact that is not supported by the Knowledge Layer context.",
+      };
+    }
+
+    if (
+      classification === "FACT" &&
+      !verifiedContext
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "LLM classified knowledge as FACT without a verified trusted context.",
+      };
+    }
+
+    if (
+      classification === "FACT" &&
+      (
+        metadata.evidence === undefined ||
+        metadata.evidence.length === 0 ||
+        metadata.evidence.some(
+          (citation) => citation.status !== "VERIFIED",
+        )
+      )
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "FACT decisions require explicit VERIFIED evidence citations.",
+      };
+    }
+
+    if (
+      classification === "UNKNOWN" &&
+      metadata.facts !== undefined &&
+      metadata.facts.length > 0
+    ) {
+      return {
+        valid: false,
+        classification,
+        reason:
+          "UNKNOWN decisions cannot include asserted facts.",
+      };
+    }
+
+    return {
+      valid: true,
+      classification,
+      reason:
+        "LLM decision metadata is consistent with the Knowledge Layer boundary.",
+    };
+  }
+
   private buildUnknownContext(
     query: string,
     availability: AgentKnowledgeAvailability,
@@ -309,6 +655,7 @@ export class KnowledgeDecisionService {
         "No sufficiently verified knowledge is available as a trusted fact.",
       ],
       confidence,
+      knowledgeConfidence: confidence,
       sources,
       evidence,
       warnings,

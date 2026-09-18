@@ -79,6 +79,26 @@ export function verifyClaim(
     };
   }
 
+  if (item.verificationStatus === "UNVERIFIED") {
+    const corroboration =
+      calculateCorroboration(
+        item,
+        existingItems,
+      );
+
+    return {
+      status: "UNVERIFIED",
+      authorityScore,
+      corroborated:
+        corroboration.corroborated,
+      supportingSources:
+        corroboration.supportingSources,
+      conflictingSources: 0,
+      reason:
+        "The claim has not been verified and must not be treated as a trusted fact.",
+    };
+  }
+
   const corroboration =
     calculateCorroboration(
       item,

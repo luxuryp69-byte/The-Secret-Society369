@@ -1,4 +1,12 @@
 import { KnowledgeDecisionService } from "./knowledge/decision/knowledgeDecisionService";
+import type {
+  AgentKnowledgeDecisionContext,
+  KnowledgeDecisionClassification,
+  KnowledgeDecisionLLMMetadata,
+} from "./knowledge/decision/types";
+import type {
+  KnowledgeVerificationStatus,
+} from "../knowledge/types";
 import { askFast } from "../ai/ollama";
 
 type CEOOutput = {
@@ -7,6 +15,11 @@ type CEOOutput = {
   plan: [string, string, string];
   successCriteria: [string, string];
   whatNotToPrioritize: string;
+};
+
+type ParsedCEOJson = {
+  output: CEOOutput;
+  metadata?: KnowledgeDecisionLLMMetadata;
 };
 
 const CEO_JSON_SCHEMA = {
@@ -46,6 +59,82 @@ const CEO_JSON_SCHEMA = {
       type: "string" as const,
       description:
         "Una única iniciativa concreta que debe esperar durante estos 30 días.",
+    },
+    classification: {
+      type: "string" as const,
+      enum: [
+        "FACT",
+        "INFERENCE",
+        "ASSUMPTION",
+        "UNKNOWN",
+      ],
+      description:
+        "Clasificación de la decisión respecto al conocimiento disponible.",
+    },
+    knowledgeConfidence: {
+      type: "number" as const,
+      description:
+        "Confidence proveniente exclusivamente de Knowledge Layer.",
+    },
+    decisionConfidence: {
+      type: "number" as const,
+      minimum: 0,
+      maximum: 100,
+      description:
+        "Confidence de esta decisión, separada de knowledgeConfidence.",
+    },
+    facts: {
+      type: "array" as const,
+      items: { type: "string" as const },
+    },
+    inferences: {
+      type: "array" as const,
+      items: { type: "string" as const },
+    },
+    assumptions: {
+      type: "array" as const,
+      items: { type: "string" as const },
+    },
+    unknowns: {
+      type: "array" as const,
+      items: { type: "string" as const },
+    },
+    evidence: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        additionalProperties: false as const,
+        properties: {
+          itemId: { type: "string" as const },
+          claim: { type: "string" as const },
+          sourceUrl: { type: "string" as const },
+          confidence: { type: "number" as const },
+          status: {
+            type: "string" as const,
+            enum: [
+              "UNVERIFIED",
+              "VERIFIED",
+              "STALE",
+              "DISPUTED",
+              "REJECTED",
+              ],
+          },
+        },
+        required: [
+          "itemId",
+          "claim",
+          "sourceUrl",
+          "status",
+        ] as string[],
+      },
+    },
+    sources: {
+      type: "array" as const,
+      items: { type: "string" as const },
+    },
+    warnings: {
+      type: "array" as const,
+      items: { type: "string" as const },
     },
   },
   required: [
@@ -370,6 +459,9 @@ function formatTrustedKnowledgeEvidence(
           : "";
 
       const parts = [
+        typeof item.itemId === "string" &&
+          item.itemId.trim() &&
+          `itemId=${item.itemId.trim()}`,
         claim && `claim=${claim}`,
         status && `status=${status}`,
         confidence && `confidence=${confidence}`,
@@ -391,6 +483,35 @@ function formatTrustedKnowledgeEvidence(
   return evidence.length > 0
     ? evidence.join("\n")
     : "No trusted knowledge evidence available.";
+}
+
+function formatNonTrustedKnowledge(
+  decision: AgentKnowledgeDecisionContext,
+): string {
+  if (decision.classification === "FACT") {
+    return "No non-trusted knowledge warnings.";
+  }
+
+  const parts = [
+    `availability=${decision.availability}`,
+    `status=${decision.status}`,
+    `warnings=${decision.warnings.join(", ") || "none"}`,
+    `explanation=${decision.explanation}`,
+  ];
+
+  if (
+    (
+      decision.status === "STALE" ||
+      decision.status === "UNVERIFIED"
+    ) &&
+    decision.answer !== null
+  ) {
+    parts.push(
+      `nonTrustedCandidate=${decision.answer}`,
+    );
+  }
+
+  return parts.join(" | ");
 }
 
 function truncateContext(value: string): string {
@@ -1001,13 +1122,20 @@ export function buildCEOUserPrompt(
   const knowledgeDecisionContext =
     truncateContext(
       [
-        `classification=${knowledgeDecision.classification}`,
-        `status=${knowledgeDecision.status}`,
-        `confidence=${knowledgeDecision.confidence}`,
-        `facts=${knowledgeDecision.facts.join(" | ") || "none"}`,
-        `unknowns=${knowledgeDecision.unknowns.join(" | ") || "none"}`,
-      ].join("\n"),
+          `classification=${knowledgeDecision.classification}`,
+          `status=${knowledgeDecision.status}`,
+          `confidence=${knowledgeDecision.confidence}`,
+          `knowledgeConfidence=${knowledgeDecision.knowledgeConfidence}`,
+          `facts=${knowledgeDecision.facts.join(" | ") || "none"}`,
+          `unknowns=${knowledgeDecision.unknowns.join(" | ") || "none"}`,
+        ].join("\n"),
     );
+
+  const nonTrustedKnowledge = truncateContext(
+    formatNonTrustedKnowledge(
+      knowledgeDecision,
+    ),
+  );
 
   return `You are the CEO and strategic decision-maker of Founder OS.
 
@@ -1035,6 +1163,14 @@ ${memoryContext}
 RELEVANT KNOWLEDGE
 
 ${knowledgeContext}
+
+VERIFIED KNOWLEDGE
+
+${knowledgeDecision.classification === "FACT" ? knowledgeContext : "No verified facts are available."}
+
+NON-TRUSTED KNOWLEDGE AND WARNINGS
+
+${nonTrustedKnowledge}
 
 KNOWLEDGE SOURCES
 
@@ -1066,11 +1202,26 @@ Decision rules:
 
 - Prefer specific company facts over generic startup advice.
 - Do not invent metrics, customers, revenue, churn, runway, or company facts.
+- VERIFIED evidence may be used as FACT only when it is present in the Knowledge Decision Context.
+- STALE and UNVERIFIED knowledge are not current facts; use them only as warnings or clearly labelled inference.
+- DISPUTED and REJECTED knowledge are blocked and must not be used as trusted evidence.
+- NO_MATCH means UNKNOWN; do not fabricate a fact to fill the gap.
+- Every cited evidence itemId and source URL must exist in the supplied Knowledge Layer context.
+- Do not invent claims, sources, URLs, confidence, or provenance.
 - If a metric is unknown, define how it should be measured instead of fabricating a number.
 - The three actions must directly support the same primary priority.
 - The success criteria must be objectively measurable.
 - whatNotToPrioritize must be a real tradeoff relative to the chosen priority.
 - Do not recommend multiple competing top priorities.
+
+Grounding metadata, when supplied, must include:
+
+- classification: FACT, INFERENCE, ASSUMPTION, or UNKNOWN
+- knowledgeConfidence: copy the Knowledge Layer value; never increase it
+- decisionConfidence: your decision confidence from 0 to 100, separate from knowledgeConfidence
+- facts, inferences, assumptions, unknowns: keep these categories distinct
+- evidence: cite only supplied itemId values and matching claims/statuses
+- sources: cite only supplied source URLs
 
 All values must be in Spanish.
 
@@ -1087,7 +1238,238 @@ Do not add fields.
 Do not explain or repeat the schema.`;
 }
 
-function parseCEOJson(raw: string): CEOOutput | null {
+function hasOwn(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(
+    value,
+    key,
+  );
+}
+
+function parseOptionalStringArray(
+  value: Record<string, unknown>,
+  key: string,
+): string[] | null | undefined {
+  if (!hasOwn(value, key)) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value[key])) {
+    return null;
+  }
+
+  const items = value[key] as unknown[];
+
+  if (
+    items.some(
+      (item) =>
+        typeof item !== "string" ||
+        item.trim() === "",
+    )
+  ) {
+    return null;
+  }
+
+  return items.map((item) =>
+    (item as string).trim(),
+  );
+}
+
+function parseOptionalCEOClassification(
+  value: Record<string, unknown>,
+): KnowledgeDecisionClassification | null | undefined {
+  if (!hasOwn(value, "classification")) {
+    return undefined;
+  }
+
+  if (
+    value.classification !== "FACT" &&
+    value.classification !== "INFERENCE" &&
+    value.classification !== "ASSUMPTION" &&
+    value.classification !== "UNKNOWN"
+  ) {
+    return null;
+  }
+
+  return value.classification;
+}
+
+function parseOptionalCEOEvidence(
+  value: Record<string, unknown>,
+): KnowledgeDecisionLLMMetadata["evidence"] | null | undefined {
+  if (!hasOwn(value, "evidence")) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value.evidence)) {
+    return null;
+  }
+
+  const allowedStatuses: KnowledgeVerificationStatus[] = [
+    "UNVERIFIED",
+    "VERIFIED",
+    "STALE",
+    "DISPUTED",
+    "REJECTED",
+  ];
+
+  const citations: NonNullable<KnowledgeDecisionLLMMetadata["evidence"]> = [];
+
+  for (const item of value.evidence) {
+    if (
+      typeof item !== "object" ||
+      item === null
+    ) {
+      return null;
+    }
+
+    const citation = item as Record<string, unknown>;
+
+    if (
+      typeof citation.itemId !== "string" ||
+      citation.itemId.trim() === ""
+    ) {
+      return null;
+    }
+
+    const parsed = {
+      itemId: citation.itemId.trim(),
+    } as NonNullable<KnowledgeDecisionLLMMetadata["evidence"]>[number];
+
+    for (const key of ["claim", "sourceUrl"] as const) {
+      if (!hasOwn(citation, key)) {
+        continue;
+      }
+
+      if (
+        typeof citation[key] !== "string" ||
+        citation[key].trim() === ""
+      ) {
+        return null;
+      }
+
+      parsed[key] = citation[key].trim();
+    }
+
+    if (hasOwn(citation, "confidence")) {
+      if (
+        typeof citation.confidence !== "number" ||
+        !Number.isFinite(citation.confidence)
+      ) {
+        return null;
+      }
+
+      parsed.confidence = citation.confidence;
+    }
+
+    if (hasOwn(citation, "status")) {
+      if (
+        typeof citation.status !== "string" ||
+        !allowedStatuses.includes(
+          citation.status as KnowledgeVerificationStatus,
+        )
+      ) {
+        return null;
+      }
+
+      parsed.status = citation.status as KnowledgeVerificationStatus;
+    }
+
+    citations.push(parsed);
+  }
+
+  return citations;
+}
+
+function parseCEOJsonMetadata(
+  value: Record<string, unknown>,
+): KnowledgeDecisionLLMMetadata | null | undefined {
+  const classification =
+    parseOptionalCEOClassification(value);
+
+  if (classification === null) {
+    return null;
+  }
+
+  const metadata: KnowledgeDecisionLLMMetadata = {};
+  let present = classification !== undefined;
+
+  if (classification !== undefined) {
+    metadata.classification = classification;
+  }
+
+  for (const key of [
+    "facts",
+    "inferences",
+    "assumptions",
+    "unknowns",
+    "warnings",
+  ] as const) {
+    const parsed = parseOptionalStringArray(
+      value,
+      key,
+    );
+
+    if (parsed === null) {
+      return null;
+    }
+
+    if (parsed !== undefined) {
+      metadata[key] = parsed;
+      present = true;
+    }
+  }
+
+  const evidence = parseOptionalCEOEvidence(value);
+
+  if (evidence === null) {
+    return null;
+  }
+
+  if (evidence !== undefined) {
+    metadata.evidence = evidence;
+    present = true;
+  }
+
+  if (hasOwn(value, "sources")) {
+    const sources = parseOptionalStringArray(
+      value,
+      "sources",
+    );
+
+    if (sources === null) {
+      return null;
+    }
+
+    metadata.sources = sources ?? [];
+    present = true;
+  }
+
+  for (const key of [
+    "knowledgeConfidence",
+    "decisionConfidence",
+  ] as const) {
+    if (!hasOwn(value, key)) {
+      continue;
+    }
+
+    if (
+      typeof value[key] !== "number" ||
+      !Number.isFinite(value[key])
+    ) {
+      return null;
+    }
+
+    metadata[key] = value[key] as number;
+    present = true;
+  }
+
+  return present ? metadata : undefined;
+}
+
+function parseCEOJson(raw: string): ParsedCEOJson | null {
   try {
     const parsed = JSON.parse(raw) as Partial<CEOOutput>;
 
@@ -1209,12 +1591,25 @@ function parseCEOJson(raw: string): CEOOutput | null {
       return null;
     }
 
+    const metadata = parseCEOJsonMetadata(
+      parsed as Record<string, unknown>,
+    );
+
+    if (metadata === null) {
+      return null;
+    }
+
     return {
-      primaryPriority,
-      why,
-      plan,
-      successCriteria,
-      whatNotToPrioritize,
+      output: {
+        primaryPriority,
+        why,
+        plan,
+        successCriteria,
+        whatNotToPrioritize,
+      },
+      ...(metadata !== undefined
+        ? { metadata }
+        : {}),
     };
   } catch {
     return null;
@@ -1457,36 +1852,6 @@ function normalizeCEOOutput(
 }
 
 
-function toCEOText(
-  result: CEOOutput,
-): string {
-  return `PRIMARY PRIORITY
-
-${result.primaryPriority}
-
-WHY
-
-${result.why}
-
-30-DAY PLAN
-
-1. ${result.plan[0]}
-
-2. ${result.plan[1]}
-
-3. ${result.plan[2]}
-
-SUCCESS CRITERIA
-
-1. ${result.successCriteria[0]}
-
-2. ${result.successCriteria[1]}
-
-WHAT NOT TO PRIORITIZE
-
-${result.whatNotToPrioritize}`;
-}
-
 export function strategicFallback(
   signal: StrategicSignal,
 ): CEOOutput {
@@ -1639,6 +2004,22 @@ function normalizeCEOFormatting(
   );
 }
 
+function shouldUseLLMDecisionLayer(): boolean {
+  const mode =
+    process.env.FOUNDER_OS_CEO_DECISION_MODE ??
+    "auto";
+
+  if (mode === "llm") {
+    return true;
+  }
+
+  if (mode === "deterministic") {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== "test";
+}
+
 export async function ceoAgent(
   message: string,
   context: CEOContext = {},
@@ -1652,9 +2033,13 @@ export async function ceoAgent(
     knowledge,
   );
 
+  const knowledgeDecision =
+    new KnowledgeDecisionService().createContext(
+      knowledge,
+    );
+
   console.log("\n👔 CEO Agent");
   console.log("🧠 CEO Mode | STRATEGIC");
-
   console.log(
     `📋 CEO Context | memory=${
       memory !== undefined ? "yes" : "no"
@@ -1667,34 +2052,114 @@ export async function ceoAgent(
     `🎯 CEO Constraint | ${signal.constraint}`,
   );
 
-  // -------------------------------------------------------
-  // Canonical deterministic decisions
-  // -------------------------------------------------------
-  //
-  // Strategic constraints are already identified by
-  // detectStrategicSignal(). The fallback strategy is the
-  // canonical response for these known bottlenecks.
-  //
-  // Avoid a local model call here: Ollama latency can be
-  // tens of seconds while the strategic decision is already
-  // deterministic and covered by regression tests.
-  // -------------------------------------------------------
+  console.log(
+    `🧠 CEO Knowledge | availability=${knowledgeDecision.availability} | classification=${knowledgeDecision.classification} | evidence=${knowledgeDecision.evidence.length}`,
+  );
 
-  // -------------------------------------------------------
-  // Canonical deterministic decisions
-  // -------------------------------------------------------
-  //
-  // detectStrategicSignal() already identifies the dominant
-  // bottleneck. For canonical strategic constraints, avoid a
-  // local model call because the decision is deterministic.
-  // This keeps CEO strategic responses fast and stable.
-  // -------------------------------------------------------
+  const fallback =
+    strategicFallback(
+      signal,
+    );
+
+  if (!shouldUseLLMDecisionLayer()) {
+    console.log(
+      `⚡ CEO deterministic decision layer | ${signal.constraint}`,
+    );
+
+    return JSON.stringify(fallback);
+  }
+
+  const prompt = buildCEOUserPrompt(
+    message,
+    memory,
+    knowledge,
+    signal,
+  );
 
   console.log(
-    `⚡ CEO deterministic strategy | ${signal.constraint}`,
+    `🧠 CEO decision layer | constraint=${signal.constraint} | prompt=${prompt.length} chars`,
   );
 
-  return JSON.stringify(
-    strategicFallback(signal),
-  );
+  try {
+    const raw = await askFast(
+      prompt,
+      {
+        temperature: 0.2,
+        num_predict: 512,
+        format: CEO_JSON_SCHEMA,
+      },
+    );
+
+    const parsedResult = parseCEOJson(raw);
+
+    if (parsedResult === null) {
+      console.warn(
+        "⚠️ CEO DECISION | invalid structured output; using deterministic fallback",
+      );
+
+      console.log(
+        `⚡ CEO deterministic fallback | ${signal.constraint}`,
+      );
+
+      return JSON.stringify(fallback);
+    }
+
+    const validation =
+      new KnowledgeDecisionService().validateLLMDecision(
+        knowledgeDecision,
+        parsedResult.metadata,
+      );
+
+    console.log(
+      `🧠 CEO Decision Validation | valid=${validation.valid} | classification=${validation.classification}`,
+    );
+
+    if (!validation.valid) {
+      console.warn(
+        `⚠️ CEO DECISION | knowledge boundary violation; using deterministic fallback: ${validation.reason}`,
+      );
+
+      console.log(
+        `⚡ CEO deterministic fallback | ${signal.constraint}`,
+      );
+
+      return JSON.stringify(fallback);
+    }
+
+    const parsed = parsedResult.output;
+
+    if (!hasStrategicEvidence(parsed, signal)) {
+      console.warn(
+        "⚠️ CEO DECISION | output lacks evidence for detected constraint; using deterministic fallback",
+      );
+
+      console.log(
+        `⚡ CEO deterministic fallback | ${signal.constraint}`,
+      );
+
+      return JSON.stringify(fallback);
+    }
+
+    const normalized = normalizeCEOOutput(
+      parsed,
+      signal,
+    );
+
+    console.log(
+      `✅ CEO decision accepted | ${signal.constraint}`,
+    );
+
+    return JSON.stringify(normalized);
+  } catch (error) {
+    console.error(
+      "❌ CEO DECISION | provider failure; using deterministic fallback",
+      error,
+    );
+
+    console.log(
+      `⚡ CEO deterministic fallback | ${signal.constraint}`,
+    );
+
+    return JSON.stringify(fallback);
+  }
 }
