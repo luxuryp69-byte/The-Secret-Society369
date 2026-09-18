@@ -1,9 +1,21 @@
+import { randomUUID } from "node:crypto";
+
 import { KnowledgeDecisionService } from "./knowledge/decision/knowledgeDecisionService";
 import type {
   AgentKnowledgeDecisionContext,
   KnowledgeDecisionClassification,
   KnowledgeDecisionLLMMetadata,
+  KnowledgeDecisionValidationResult,
 } from "./knowledge/decision/types";
+import {
+  buildDecisionTrace,
+  projectTraceEvidence,
+} from "./decisionTrace/buildDecisionTrace";
+import type {
+  DecisionTraceResolution,
+  TraceDecisionMetadata,
+  TraceEvidenceReference,
+} from "./decisionTrace/types";
 import type {
   KnowledgeVerificationStatus,
 } from "../knowledge/types";
@@ -2020,6 +2032,122 @@ function shouldUseLLMDecisionLayer(): boolean {
   return process.env.NODE_ENV !== "test";
 }
 
+function projectValidatedAcceptedEvidence(
+  knowledge: AgentKnowledgeDecisionContext,
+  metadata: KnowledgeDecisionLLMMetadata | undefined,
+  validation: KnowledgeDecisionValidationResult | undefined,
+): TraceEvidenceReference[] {
+  if (
+    validation?.valid !== true ||
+    metadata?.evidence === undefined
+  ) {
+    return [];
+  }
+
+  const evidenceById = new Map(
+    knowledge.evidence.map((evidence) => [
+      evidence.itemId,
+      evidence,
+    ]),
+  );
+
+  return metadata.evidence.flatMap((citation) => {
+    const evidence = evidenceById.get(
+      citation.itemId,
+    );
+
+    return evidence === undefined
+      ? []
+      : [projectTraceEvidence(evidence)];
+  });
+}
+
+function createTraceDecisionMetadata(
+  resolution: DecisionTraceResolution,
+  knowledge: AgentKnowledgeDecisionContext,
+  metadata: KnowledgeDecisionLLMMetadata | undefined,
+  validation: KnowledgeDecisionValidationResult | undefined,
+  finalLLMDecision: boolean,
+  fallbackReason?: string,
+): TraceDecisionMetadata {
+  const traceMetadata: TraceDecisionMetadata = {
+    resolution,
+  };
+
+  if (
+    finalLLMDecision &&
+    metadata?.classification !== undefined
+  ) {
+    traceMetadata.classification =
+      metadata.classification;
+  }
+
+  if (
+    finalLLMDecision &&
+    metadata?.decisionConfidence !== undefined
+  ) {
+    traceMetadata.decisionConfidence =
+      metadata.decisionConfidence;
+  }
+
+  if (finalLLMDecision) {
+    traceMetadata.acceptedEvidence =
+      projectValidatedAcceptedEvidence(
+        knowledge,
+        metadata,
+        validation,
+      );
+
+    for (const key of [
+      "inferences",
+      "assumptions",
+      "unknowns",
+      "warnings",
+    ] as const) {
+      const values = metadata?.[key];
+
+      if (values !== undefined) {
+        traceMetadata[key] = [...values];
+      }
+    }
+  }
+
+  if (validation !== undefined) {
+    traceMetadata.validation = validation;
+  }
+
+  if (fallbackReason !== undefined) {
+    traceMetadata.fallbackReason =
+      fallbackReason;
+  }
+
+  return traceMetadata;
+}
+
+function buildInternalDecisionTrace(
+  message: string,
+  signal: StrategicSignal,
+  knowledge: AgentKnowledgeDecisionContext,
+  output: CEOOutput,
+  metadata: TraceDecisionMetadata,
+): void {
+  try {
+    void buildDecisionTrace({
+      traceId: randomUUID(),
+      createdAt: new Date().toISOString(),
+      input: { message },
+      strategicSignal: signal,
+      knowledge,
+      decision: {
+        output,
+        metadata,
+      },
+    });
+  } catch {
+    // Decision Trace is lateral audit output and must not alter CEO output.
+  }
+}
+
 export async function ceoAgent(
   message: string,
   context: CEOContext = {},
@@ -2066,6 +2194,21 @@ export async function ceoAgent(
       `⚡ CEO deterministic decision layer | ${signal.constraint}`,
     );
 
+    buildInternalDecisionTrace(
+      message,
+      signal,
+      knowledgeDecision,
+      fallback,
+      createTraceDecisionMetadata(
+        "DETERMINISTIC_FALLBACK",
+        knowledgeDecision,
+        undefined,
+        undefined,
+        false,
+        "LLM decision layer was not used.",
+      ),
+    );
+
     return JSON.stringify(fallback);
   }
 
@@ -2101,6 +2244,21 @@ export async function ceoAgent(
         `⚡ CEO deterministic fallback | ${signal.constraint}`,
       );
 
+      buildInternalDecisionTrace(
+        message,
+        signal,
+        knowledgeDecision,
+        fallback,
+        createTraceDecisionMetadata(
+          "DETERMINISTIC_FALLBACK",
+          knowledgeDecision,
+          undefined,
+          undefined,
+          false,
+          "LLM returned invalid JSON.",
+        ),
+      );
+
       return JSON.stringify(fallback);
     }
 
@@ -2123,6 +2281,21 @@ export async function ceoAgent(
         `⚡ CEO deterministic fallback | ${signal.constraint}`,
       );
 
+      buildInternalDecisionTrace(
+        message,
+        signal,
+        knowledgeDecision,
+        fallback,
+        createTraceDecisionMetadata(
+          "DETERMINISTIC_FALLBACK",
+          knowledgeDecision,
+          parsedResult.metadata,
+          validation,
+          false,
+          validation.reason,
+        ),
+      );
+
       return JSON.stringify(fallback);
     }
 
@@ -2137,6 +2310,21 @@ export async function ceoAgent(
         `⚡ CEO deterministic fallback | ${signal.constraint}`,
       );
 
+      buildInternalDecisionTrace(
+        message,
+        signal,
+        knowledgeDecision,
+        fallback,
+        createTraceDecisionMetadata(
+          "DETERMINISTIC_FALLBACK",
+          knowledgeDecision,
+          parsedResult.metadata,
+          validation,
+          false,
+          "Accepted LLM output lacked evidence for the detected strategic constraint.",
+        ),
+      );
+
       return JSON.stringify(fallback);
     }
 
@@ -2149,6 +2337,20 @@ export async function ceoAgent(
       `✅ CEO decision accepted | ${signal.constraint}`,
     );
 
+    buildInternalDecisionTrace(
+      message,
+      signal,
+      knowledgeDecision,
+      normalized,
+      createTraceDecisionMetadata(
+        "LLM",
+        knowledgeDecision,
+        parsedResult.metadata,
+        validation,
+        true,
+      ),
+    );
+
     return JSON.stringify(normalized);
   } catch (error) {
     console.error(
@@ -2158,6 +2360,21 @@ export async function ceoAgent(
 
     console.log(
       `⚡ CEO deterministic fallback | ${signal.constraint}`,
+    );
+
+    buildInternalDecisionTrace(
+      message,
+      signal,
+      knowledgeDecision,
+      fallback,
+      createTraceDecisionMetadata(
+        "DETERMINISTIC_FALLBACK",
+        knowledgeDecision,
+        undefined,
+        undefined,
+        false,
+        "CEO decision provider failed.",
+      ),
     );
 
     return JSON.stringify(fallback);
