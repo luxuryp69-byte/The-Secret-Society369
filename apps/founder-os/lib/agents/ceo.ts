@@ -1,3 +1,4 @@
+import type { DecisionTrace } from "./decisionTrace/types";
 import { randomUUID } from "node:crypto";
 
 import { KnowledgeDecisionService } from "./knowledge/decision/knowledgeDecisionService";
@@ -161,6 +162,7 @@ const CEO_JSON_SCHEMA = {
 type CEOContext = {
   memory?: unknown;
   knowledge?: unknown;
+  onDecisionTrace?: (trace: DecisionTrace) => void;
 };
 
 type TrustAwareKnowledgeSource = {
@@ -2130,9 +2132,9 @@ function buildInternalDecisionTrace(
   knowledge: AgentKnowledgeDecisionContext,
   output: CEOOutput,
   metadata: TraceDecisionMetadata,
-): void {
+  onDecisionTrace?: (trace: DecisionTrace) => void,): void {
   try {
-    void buildDecisionTrace({
+    const trace = buildDecisionTrace({
       traceId: randomUUID(),
       createdAt: new Date().toISOString(),
       input: { message },
@@ -2143,6 +2145,8 @@ function buildInternalDecisionTrace(
         metadata,
       },
     });
+    onDecisionTrace?.(trace);
+
   } catch {
     // Decision Trace is lateral audit output and must not alter CEO output.
   }
@@ -2154,6 +2158,7 @@ export async function ceoAgent(
 ): Promise<string> {
   const memory = context.memory;
   const knowledge = context.knowledge;
+  const onDecisionTrace = context.onDecisionTrace;
 
   const signal = detectStrategicSignal(
     message,
@@ -2207,7 +2212,9 @@ export async function ceoAgent(
         false,
         "LLM decision layer was not used.",
       ),
-    );
+
+    onDecisionTrace,
+);
 
     return JSON.stringify(fallback);
   }
@@ -2257,7 +2264,9 @@ export async function ceoAgent(
           false,
           "LLM returned invalid JSON.",
         ),
-      );
+
+      onDecisionTrace,
+);
 
       return JSON.stringify(fallback);
     }
@@ -2294,7 +2303,9 @@ export async function ceoAgent(
           false,
           validation.reason,
         ),
-      );
+
+      onDecisionTrace,
+);
 
       return JSON.stringify(fallback);
     }
@@ -2323,7 +2334,9 @@ export async function ceoAgent(
           false,
           "Accepted LLM output lacked evidence for the detected strategic constraint.",
         ),
-      );
+
+      onDecisionTrace,
+);
 
       return JSON.stringify(fallback);
     }
@@ -2349,7 +2362,9 @@ export async function ceoAgent(
         validation,
         true,
       ),
-    );
+
+    onDecisionTrace,
+);
 
     return JSON.stringify(normalized);
   } catch (error) {
@@ -2375,7 +2390,9 @@ export async function ceoAgent(
         false,
         "CEO decision provider failed.",
       ),
-    );
+
+    onDecisionTrace,
+);
 
     return JSON.stringify(fallback);
   }
