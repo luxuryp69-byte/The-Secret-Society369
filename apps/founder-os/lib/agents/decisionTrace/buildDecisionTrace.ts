@@ -94,6 +94,57 @@ function copySources(
   }));
 }
 
+
+function normalizeSourceUrls(
+  urls: readonly string[],
+): string[] {
+  return [...urls];
+}
+
+function sameStringArray(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length != right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function projectGroundedAcceptedEvidence(
+  knowledge: AgentKnowledgeDecisionContext,
+  acceptedEvidence: readonly TraceEvidenceReference[] | undefined,
+  validationValid: boolean | undefined,
+): TraceEvidenceReference[] {
+  if (
+    validationValid !== true ||
+    acceptedEvidence === undefined
+  ) {
+    return [];
+  }
+
+  const authoritativeEvidence =
+    knowledge.evidence;
+
+  return acceptedEvidence.flatMap((candidate) => {
+    const match = authoritativeEvidence.find(
+      (evidence) =>
+        evidence.itemId === candidate.itemId &&
+        evidence.claim === candidate.claim &&
+        evidence.status === candidate.status &&
+        sameStringArray(
+          normalizeSourceUrls(evidence.sourceUrls ?? []),
+          normalizeSourceUrls(candidate.sourceUrls),
+        ),
+    );
+
+    return match === undefined
+      ? []
+      : [projectTraceEvidence(match)];
+  });
+}
+
 function copyKnowledge(
   knowledge: AgentKnowledgeDecisionContext,
   excludedInformation: readonly TraceExcludedInformation[],
@@ -215,9 +266,12 @@ export function buildDecisionTrace(
         : {}),
       knowledgeConfidence:
         input.knowledge.knowledgeConfidence,
-      acceptedEvidence: (
-        metadata.acceptedEvidence ?? []
-      ).map(copyEvidenceReference),
+      acceptedEvidence:
+        projectGroundedAcceptedEvidence(
+          input.knowledge,
+          metadata.acceptedEvidence,
+          metadata.validation?.valid,
+        ),
       ...(metadata.validation !== undefined
         ? {
             validation: copyValidation(
