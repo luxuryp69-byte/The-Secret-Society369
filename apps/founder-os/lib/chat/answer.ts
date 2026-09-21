@@ -4,9 +4,23 @@ import { ceoAgent } from "@/lib/agents/ceo";
 import { KnowledgeQueryService } from "@/lib/knowledge/query/knowledgeQueryService";
 import { AgentKnowledgeService } from "@/lib/agents/knowledge/agentKnowledgeService";
 import type { DecisionTrace } from "@/lib/agents/decisionTrace/types";
+import { saveDecisionTrace } from "@/lib/agents/decisionTrace/store";
 
 export interface AnswerOptions {
   onDecisionTrace?: (trace: DecisionTrace) => void;
+}
+
+async function persistTraceSafely(
+  trace: DecisionTrace,
+): Promise<void> {
+  try {
+    await saveDecisionTrace(trace);
+  } catch (error) {
+    console.warn(
+      "⚠️ Decision Trace persistence failed. Continuing without persistence.",
+      error,
+    );
+  }
 }
 
 export async function answer(
@@ -30,20 +44,31 @@ export async function answer(
       message,
     );
 
-  return ceoAgent(
+  let capturedTrace: DecisionTrace | null =
+    null;
+
+  const response = await ceoAgent(
     message,
     {
       memory,
       knowledge,
-      onDecisionTrace: options.onDecisionTrace
-        ? (trace) => {
-            try {
-              options.onDecisionTrace?.(trace);
-            } catch {
-              // Trace observers are non-critical and must never alter the answer contract.
-            }
-          }
-        : undefined,
+      onDecisionTrace: (trace) => {
+        capturedTrace = trace;
+      },
     },
   );
+
+  if (capturedTrace !== null) {
+    await persistTraceSafely(capturedTrace);
+
+    if (options.onDecisionTrace) {
+      try {
+        options.onDecisionTrace(capturedTrace);
+      } catch {
+        // Trace observers are non-critical and must never alter the answer contract.
+      }
+    }
+  }
+
+  return response;
 }

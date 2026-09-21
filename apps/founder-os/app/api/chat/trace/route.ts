@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { answer } from "@/lib/chat/answer";
+import { authorizeDecisionTraceRequest } from "@/lib/agents/decisionTrace/access";
+
 import type { DecisionTrace } from "@/lib/agents/decisionTrace/types";
 
 const MAX_MESSAGE_LENGTH = 10_000;
@@ -16,6 +18,19 @@ function badRequest(error: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const access =
+    authorizeDecisionTraceRequest(req);
+
+  if (!access.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: access.error,
+      },
+      { status: access.status },
+    );
+  }
+
   try {
     const body = await req.json();
 
@@ -53,12 +68,16 @@ export async function POST(req: NextRequest) {
       trace,
     });
   } catch (error) {
-    console.error("❌ Chat trace request failed", error);
+    console.error(
+      "❌ Chat trace request failed",
+      error,
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: "Unable to process the chat trace request.",
+        error:
+          "Unable to process the chat trace request.",
       },
       { status: 500 },
     );
