@@ -43,6 +43,38 @@ export interface TraceEvidenceReference {
 
 export type TraceSourceReference = Readonly<TrustedAnswerSource>;
 
+export type TraceMemoryCategory =
+  | "founder"
+  | "company"
+  | "product"
+  | "goals"
+  | "decisions"
+  | "knowledge"
+  | "conversations"
+  | "insights";
+
+export type TraceMemoryRelation =
+  | "AVAILABLE_CONTEXT";
+
+export interface TraceMemoryProvenance {
+  source: "FOUNDER_MEMORY";
+  kind: "CONTEXT";
+}
+
+export interface TraceMemoryReference {
+  category: TraceMemoryCategory;
+  reference?: string;
+  relation: TraceMemoryRelation;
+  provenance: TraceMemoryProvenance;
+}
+
+export interface TraceMemory {
+  available: boolean;
+  categories: TraceMemoryCategory[];
+  references: TraceMemoryReference[];
+  provenance: TraceMemoryProvenance;
+}
+
 export interface TraceExcludedInformation {
   category: TraceExcludedInformationCategory;
   reference?: string;
@@ -109,6 +141,7 @@ export interface DecisionTrace {
   createdAt: string;
   input: DecisionTraceInput;
   strategicSignal: StrategicSignal;
+  memory: TraceMemory;
   knowledge: TraceKnowledge;
   decision: TraceDecision;
   explanation: TraceExplanation;
@@ -119,6 +152,7 @@ export interface DecisionTraceBuildInput {
   createdAt: string;
   input: DecisionTraceInput;
   strategicSignal: StrategicSignal;
+  memory?: unknown;
   knowledge: AgentKnowledgeDecisionContext;
   decision: {
     output: TraceCEOOutput;

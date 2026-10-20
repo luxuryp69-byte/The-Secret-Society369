@@ -2129,6 +2129,7 @@ function createTraceDecisionMetadata(
 function buildInternalDecisionTrace(
   message: string,
   signal: StrategicSignal,
+  contextMemory: unknown,
   knowledge: AgentKnowledgeDecisionContext,
   output: CEOOutput,
   metadata: TraceDecisionMetadata,
@@ -2202,6 +2203,7 @@ export async function ceoAgent(
     buildInternalDecisionTrace(
       message,
       signal,
+      memory,
       knowledgeDecision,
       fallback,
       createTraceDecisionMetadata(
@@ -2254,6 +2256,7 @@ export async function ceoAgent(
       buildInternalDecisionTrace(
         message,
         signal,
+        memory,
         knowledgeDecision,
         fallback,
         createTraceDecisionMetadata(
@@ -2293,6 +2296,7 @@ export async function ceoAgent(
       buildInternalDecisionTrace(
         message,
         signal,
+        memory,
         knowledgeDecision,
         fallback,
         createTraceDecisionMetadata(
@@ -2324,6 +2328,7 @@ export async function ceoAgent(
       buildInternalDecisionTrace(
         message,
         signal,
+        memory,
         knowledgeDecision,
         fallback,
         createTraceDecisionMetadata(
@@ -2353,6 +2358,7 @@ export async function ceoAgent(
     buildInternalDecisionTrace(
       message,
       signal,
+      memory,
       knowledgeDecision,
       normalized,
       createTraceDecisionMetadata(
@@ -2380,6 +2386,7 @@ export async function ceoAgent(
     buildInternalDecisionTrace(
       message,
       signal,
+      memory,
       knowledgeDecision,
       fallback,
       createTraceDecisionMetadata(

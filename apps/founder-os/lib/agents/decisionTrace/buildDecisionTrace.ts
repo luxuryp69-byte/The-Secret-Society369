@@ -11,6 +11,7 @@ import type {
   TraceKnowledge,
   TraceSourceReference,
 } from "./types";
+import { projectTraceMemory } from "./memoryProjection";
 
 function copyStringArray(
   values: readonly string[] | undefined,
@@ -246,6 +247,9 @@ export function buildDecisionTrace(
       confidence:
         input.strategicSignal.confidence,
     },
+    memory: projectTraceMemory(
+      input.memory,
+    ),
     knowledge,
     decision: {
       output: copyOutput(
